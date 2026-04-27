@@ -21,6 +21,8 @@ import { StudentSortDropdown, sortStudents, type SortKey } from './components/St
 import { StudentSearchAdvanced } from './components/StudentSearchAdvanced';
 import { AdminImportExportTab } from './components/AdminImportExportTab';
 import { AdminBackendTab } from './components/AdminBackendTab';
+import { ImageFallback } from './components/ImageFallback';
+import { CacheHealthTab } from './components/CacheHealthTab';
 import { 
   Trophy, ArrowLeft, Plus, CheckCircle2, Circle, Medal, Award, Flame, 
   Settings, Search, Edit, Trash2, X, ChevronDown, ChevronUp, Users, 
@@ -407,7 +409,7 @@ export default function App() {
               onClick={() => navigateTo('/')}
             >
               {appSettings.logoUrl ? (
-                <img src={appSettings.logoUrl || undefined} alt="Logo" className="h-10 w-10 object-contain rounded-xl" />
+                <ImageFallback src={appSettings.logoUrl} alt="Logo" variant="logo" className="h-10 w-10 object-contain rounded-xl" wrapperClassName="h-10 w-10" />
               ) : (
                 <div className="bg-primary-600 p-2 rounded-xl group-hover:rotate-6 transition-transform">
                   <Trophy className="h-6 w-6 text-base-50" />
@@ -525,7 +527,7 @@ export default function App() {
 
         {appSettings?.logoUrl ? (
           <div className="w-16 h-16 -mt-8 rounded-full border-4 border-base-200 bg-base-100 shadow-sm flex items-center justify-center overflow-hidden z-10 cursor-pointer active:scale-95 transition-transform" onClick={() => navigateTo('/')}>
-             <img src={appSettings.logoUrl || undefined} alt="" className="w-full h-full object-cover" />
+             <ImageFallback src={appSettings.logoUrl} alt="Logo" variant="logo" className="w-full h-full object-cover" wrapperClassName="w-full h-full" />
           </div>
         ) : (
           <div className="w-16 h-16 -mt-8 rounded-full border-4 border-base-200 bg-base-100 shadow-sm flex items-center justify-center z-10 text-primary-500 cursor-pointer active:scale-95 transition-transform" onClick={() => navigateTo('/')}>
@@ -585,7 +587,7 @@ function LoginPage({ onLogin, appSettings }: { onLogin: () => void, appSettings?
       <div className="bg-base-100 rounded-3xl p-8 shadow-xl border border-base-200">
         <div className="text-center mb-8">
           {appSettings?.logoUrl ? (
-            <img src={appSettings.logoUrl || undefined} alt="Logo" className="w-20 h-20 object-contain mx-auto mb-4" />
+            <ImageFallback src={appSettings.logoUrl} alt="Logo" variant="logo" className="w-20 h-20 object-contain mx-auto mb-4" wrapperClassName="w-20 h-20 mx-auto mb-4 block" />
           ) : (
             <div className="w-16 h-16 bg-primary-600 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary-200">
               <Settings className="w-8 h-8 text-base-50" />
@@ -766,7 +768,7 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
       >
         <div className="relative mb-2 cursor-pointer group active:scale-95 transition-transform flex flex-col items-center">
           {config.crown}
-          <img src={student.photo || undefined} alt={student.name} className={`${config.avatarSize} rounded-full object-cover border-[3px] md:border-4 ${config.border} shadow-lg group-hover:scale-105 transition-transform bg-base-100 relative z-10`} />
+          <ImageFallback src={student.photo} alt={student.name} variant="avatar" className={`${config.avatarSize} rounded-full object-cover border-[3px] md:border-4 ${config.border} shadow-lg group-hover:scale-105 transition-transform bg-base-100 relative z-10`} wrapperClassName={`${config.avatarSize} relative z-10`} />
           <div className="absolute -bottom-2 md:-bottom-3 bg-base-900 text-white text-[10px] md:text-sm font-black px-2 md:px-3 py-0.5 rounded-full border-2 border-base-100 z-20 shadow-sm">
             #{config.rank}
           </div>
@@ -785,7 +787,7 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
       {/* HEADER & PODIUM */}
       <div className="bg-gradient-to-br from-primary-600 to-primary-800 pt-8 px-4 rounded-b-[2.5rem] md:rounded-[2.5rem] text-base-50 shadow-2xl relative overflow-hidden -mx-4 -mt-6 sm:mx-0 sm:mt-0">
         <div className="absolute top-0 right-0 opacity-10 transform translate-x-1/4 -translate-y-1/4 rotate-12 pointer-events-none">
-          {appSettings?.logoUrl ? <img src={appSettings.logoUrl} className="w-64 h-64 opacity-50 grayscale" /> : <Trophy className="w-64 h-64" />}
+          {appSettings?.logoUrl ? <ImageFallback src={appSettings.logoUrl} alt="" variant="logo" className="w-64 h-64 opacity-50 grayscale" wrapperClassName="w-64 h-64" /> : <Trophy className="w-64 h-64" />}
         </div>
         
         <div className="relative z-10 space-y-4 max-w-2xl mx-auto mb-6 text-center">
@@ -871,7 +873,7 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
                   </div>
                   
                   <div className="relative">
-                    <img src={student.photo || undefined} alt={student.name} className="w-12 h-12 md:w-14 md:h-14 rounded-full border border-base-200 shadow-sm object-cover" />
+                    <ImageFallback src={student.photo} alt={student.name} variant="avatar" className="w-12 h-12 md:w-14 md:h-14 rounded-full border border-base-200 shadow-sm object-cover" wrapperClassName="w-12 h-12 md:w-14 md:h-14 shrink-0" />
                   </div>
                   
                   <div className="flex-1 min-w-0 pr-2">
@@ -1082,7 +1084,7 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
         <div className="absolute top-0 left-0 w-full h-32 bg-primary-600 group-hover:h-36 transition-all duration-500"></div>
         <div className="relative z-10 flex flex-col items-center text-center mt-8">
           <div className="relative">
-            <img src={student.photo || undefined} alt={student.name} className="w-32 h-32 rounded-[2rem] border-8 border-base-100 shadow-2xl bg-base-100 object-cover" />
+            <ImageFallback src={student.photo} alt={student.name} variant="avatar" className="w-32 h-32 rounded-[2rem] border-8 border-base-100 shadow-2xl bg-base-100 object-cover" wrapperClassName="w-32 h-32" />
             <div className="absolute -bottom-2 -right-2 bg-accent-500 p-2 rounded-xl text-base-50 shadow-lg">
               <CheckSquare className="w-5 h-5" />
             </div>
@@ -1506,7 +1508,7 @@ function AdminStudentsTab({ students, refreshData, masterGoals, categories, calc
       <div className="space-y-3">
         {filtered.map((s: any, index: number) => (
           <div key={s.id || `student-${index}`} className="flex items-center gap-4 p-4 rounded-2xl border border-base-200 bg-base-100 hover:border-primary-200 transition-colors shadow-sm">
-            <img src={s.photo || undefined} alt={s.name} className="w-12 h-12 rounded-xl bg-base-200" />
+            <ImageFallback src={s.photo} alt={s.name} variant="avatar" className="w-12 h-12 rounded-xl bg-base-200 object-cover" wrapperClassName="w-12 h-12 shrink-0" />
             <div className="flex-1 min-w-0">
               <h4 className="font-bold text-text-main line-clamp-2 break-words leading-tight" title={s.name}>{s.name}</h4>
               <p className="text-[10px] font-black text-text-light uppercase tracking-widest mt-1 mb-1">{s.assignedGoals.length} Handled Goals</p>
@@ -1722,7 +1724,7 @@ function StudentAdminModal({ student, masterGoals, categories, onClose, onSave }
           <div className="w-full lg:w-80 space-y-6">
             <div className="text-center">
                <div className="relative inline-block group">
-                <img src={formData.photo || undefined} alt="Avatar" className="w-32 h-32 rounded-[2rem] border-4 border-slate-50 bg-base-200 shadow-md object-cover" />
+                <ImageFallback src={formData.photo} alt="Avatar" variant="avatar" className="w-32 h-32 rounded-[2rem] border-4 border-slate-50 bg-base-200 shadow-md object-cover" wrapperClassName="w-32 h-32" />
                 <button type="button" onClick={() => fileInputRef.current?.click()} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-base-900/60 p-3 rounded-full text-base-50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm shadow-xl" title="Upload Photo">
                   <ImageIcon className="w-6 h-6" />
                 </button>
@@ -2471,7 +2473,7 @@ function AdminAppearanceTab({ refreshData, appSettings, setAppSettings }: any) {
                 <div className="flex gap-4 items-center">
                   <div className="relative inline-block group">
                     {settings.logoUrl ? (
-                      <img src={settings.logoUrl || undefined} alt="Logo" className="w-20 h-20 rounded-2xl border-4 border-base-100 bg-base-200 shadow-sm object-cover" />
+                      <ImageFallback src={settings.logoUrl} alt="Logo" variant="logo" className="w-20 h-20 rounded-2xl border-4 border-base-100 bg-base-200 shadow-sm object-cover" wrapperClassName="w-20 h-20" />
                     ) : (
                       <div className="w-20 h-20 rounded-2xl border-4 border-base-100 bg-base-200 shadow-sm flex items-center justify-center text-primary-500">
                         <ImageIcon className="w-8 h-8 opacity-50" />
@@ -2510,7 +2512,7 @@ function AdminAppearanceTab({ refreshData, appSettings, setAppSettings }: any) {
              <div className="bg-base-50 border border-base-200 rounded-2xl p-4 mb-4 shadow-sm flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {settings.logoUrl ? (
-                    <img src={settings.logoUrl || undefined} alt="" className="w-8 h-8 rounded-lg object-contain" />
+                    <ImageFallback src={settings.logoUrl} alt="" variant="logo" className="w-8 h-8 rounded-lg object-contain" wrapperClassName="w-8 h-8" />
                   ) : (
                     <div className="bg-primary-600 p-2 rounded-lg"><Trophy className="w-4 h-4 text-base-50" /></div>
                   )}
@@ -2522,7 +2524,7 @@ function AdminAppearanceTab({ refreshData, appSettings, setAppSettings }: any) {
              {/* Preview: Hero */}
              <div className="bg-gradient-to-br from-primary-600 to-primary-800 p-8 rounded-[2rem] text-base-50 shadow-2xl relative overflow-hidden mb-6">
                 <div className="absolute top-0 right-0 opacity-20 transform translate-x-1/4 -translate-y-1/4 rotate-12 mix-blend-overlay">
-                  {settings.logoUrl ? <img src={settings.logoUrl || undefined} alt="" className="w-48 h-48" /> : <Trophy className="w-48 h-48" />}
+                  {settings.logoUrl ? <ImageFallback src={settings.logoUrl} alt="" variant="logo" className="w-48 h-48" wrapperClassName="w-48 h-48" /> : <Trophy className="w-48 h-48" />}
                 </div>
                 <div className="relative z-10 space-y-3">
                   <div className="inline-flex items-center gap-2 px-3 py-1 bg-base-100/10 rounded-full text-[10px] font-bold uppercase tracking-widest backdrop-blur-sm">
