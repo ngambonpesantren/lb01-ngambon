@@ -16,6 +16,11 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import {
+  ConnectionListSkeleton,
+  CrudTableSkeleton,
+  TransferLogSkeleton,
+} from "./Skeleton";
+import {
   listConnections,
   getActiveId,
   setActive,
