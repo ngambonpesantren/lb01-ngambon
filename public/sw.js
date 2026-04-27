@@ -6,7 +6,7 @@
 //   - cache-first for images/fonts/static (fast repeat loads)
 //   - never caches POST/PUT/DELETE or /api/*  (so CRUD never goes stale)
 // Bump this whenever you change the SW so the cache health screen shows it.
-const CACHE_VERSION = 'hub-v4';
+const CACHE_VERSION = 'hub-v5';
 const BUILD_ID = '__BUILD__';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
