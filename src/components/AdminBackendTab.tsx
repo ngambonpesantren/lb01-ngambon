@@ -16,6 +16,11 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import {
+  ConnectionListSkeleton,
+  CrudTableSkeleton,
+  TransferLogSkeleton,
+} from "./Skeleton";
+import {
   listConnections,
   getActiveId,
   setActive,
@@ -158,6 +163,13 @@ function ConnectionsSection({
   const [editing, setEditing] = useState<DbConnection | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, ConnectionTestState>>({});
+  // Tiny first-paint skeleton so the section never looks blank/stuck on slow
+  // hardware while React mounts the (potentially long) connection list.
+  const [firstPaint, setFirstPaint] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setFirstPaint(false), 120);
+    return () => clearTimeout(t);
+  }, []);
 
   const handleSwitch = async (id: string) => {
     if (id === activeId) return;
@@ -231,6 +243,9 @@ function ConnectionsSection({
       </div>
 
       <ul className="space-y-3">
+        {firstPaint && connections.length === 0 && (
+          <ConnectionListSkeleton rows={2} />
+        )}
         {connections.map((c) => {
           const isActive = c.id === activeId;
           return (
@@ -652,6 +667,9 @@ function CrudSection({
         </div>
       )}
 
+      {loading && rows.length === 0 ? (
+        <CrudTableSkeleton rows={6} cols={Math.max(columns.length || 4, 4)} />
+      ) : (
       <div className="overflow-x-auto rounded-xl border border-base-200">
         <table className="min-w-full text-xs">
           <thead className="bg-base-200/60">
@@ -698,6 +716,7 @@ function CrudSection({
           </tbody>
         </table>
       </div>
+      )}
 
       {editing && (
         <RowEditor
@@ -1129,6 +1148,7 @@ function TransferSection({
         </div>
       )}
 
+      {busy && log.length === 0 && <TransferLogSkeleton lines={8} />}
       {log.length > 0 && (
         <pre className="bg-base-100 border border-base-200 rounded-xl p-3 text-[11px] font-mono text-text-main max-h-72 overflow-auto whitespace-pre-wrap">
           {log.join("\n")}

@@ -71,3 +71,9 @@ html {
   -ms-overflow-style: none;  /* IE dan Edge */
   scrollbar-width: none;  /* Firefox */
 }
+
+/* Skeleton shimmer keyframe used by <Skeleton /> and <ImageFallback /> */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
