@@ -198,16 +198,45 @@ const apiFetch = async (url: string, options: RequestInit = {}) => {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  // Route /api/* calls to the in-browser Firebase shim instead of an Express server.
-  const res = url.startsWith('/api/')
-    ? await firebaseApiFetch(url, { ...options, headers })
-    : await fetch(url, { ...options, headers, credentials: 'same-origin', cache: 'no-store' });
-
-  if (res.status === 401) {
-    removeLocalToken();
-    window.dispatchEvent(new Event('auth-expired'));
+  // Wrap every call in a per-request AbortController so a single hung backend
+  // request can never block the entire UI loader forever. 20s is generous
+  // for Supabase under load but short enough to surface real failures.
+  const isWrite = (options.method || 'GET').toUpperCase() !== 'GET';
+  const TIMEOUT_MS = isWrite ? 30000 : 20000;
+  const userSignal = (options as any).signal as AbortSignal | undefined;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(new DOMException('timeout', 'AbortError')), TIMEOUT_MS);
+  if (userSignal) {
+    if (userSignal.aborted) ctl.abort();
+    else userSignal.addEventListener('abort', () => ctl.abort(), { once: true });
   }
-  return res;
+
+  const doFetch = () =>
+    url.startsWith('/api/')
+      ? firebaseApiFetch(url, { ...options, headers, signal: ctl.signal })
+      : fetch(url, { ...options, headers, credentials: 'same-origin', cache: 'no-store', signal: ctl.signal });
+
+  try {
+    let res: Response;
+    try {
+      res = await doFetch();
+    } catch (err: any) {
+      // One quick retry on transient network blips for idempotent reads only.
+      if (!isWrite && err?.name !== 'AbortError') {
+        await new Promise((r) => setTimeout(r, 300));
+        res = await doFetch();
+      } else {
+        throw err;
+      }
+    }
+    if (res.status === 401) {
+      removeLocalToken();
+      window.dispatchEvent(new Event('auth-expired'));
+    }
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 // --- APP COMPONENT ---
@@ -260,16 +289,21 @@ export default function App() {
     return () => window.removeEventListener('auth-expired', handleAuthExpired);
   }, []);
 
-    // Data Loading
-  const refreshData = async () => {
-    setIsLoading(true);
-    try {
-      const [catsRes, goalsRes, studentsRes, settingsRes] = await Promise.all([
-        apiFetch('/api/categories'),
-        apiFetch('/api/masterGoals'),
-        apiFetch('/api/students'),
-        apiFetch('/api/settings')
-      ]);
+    // Data Loading — coalesces concurrent calls so rapid CRUD bursts don't
+    // trigger a fetch storm against the backend (which is what was producing
+    // the long buffering / white-screen behaviour).
+  const refreshInflight = useRef<Promise<void> | null>(null);
+  const refreshData = useCallback((showLoader = true) => {
+    if (refreshInflight.current) return refreshInflight.current;
+    if (showLoader) setIsLoading(true);
+    const run = (async () => {
+      try {
+        const [catsRes, goalsRes, studentsRes, settingsRes] = await Promise.all([
+          apiFetch('/api/categories'),
+          apiFetch('/api/masterGoals'),
+          apiFetch('/api/students'),
+          apiFetch('/api/settings'),
+        ]);
       
       const cats = catsRes.ok ? await catsRes.json() : [];
       const goals = goalsRes.ok ? await goalsRes.json() : [];
@@ -305,12 +339,16 @@ export default function App() {
       // Apply theme CSS variables immediately 
       applyThemeColors(sets);
 
-    } catch (err) {
-      console.error("Failed to load data", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      } catch (err) {
+        console.error('Failed to load data', err);
+      } finally {
+        setIsLoading(false);
+        refreshInflight.current = null;
+      }
+    })();
+    refreshInflight.current = run;
+    return run;
+  }, []);
 
   useEffect(() => {
     refreshData();
@@ -320,10 +358,19 @@ export default function App() {
   // Supabase) we must immediately reload all app data so the UI reflects the
   // newly-selected backend instead of stale rows from the previous one.
   useEffect(() => {
-    const handler = () => { refreshData(); };
+    // Debounce: rapid CRUD bursts in the admin panel can dispatch this event
+    // many times within a few milliseconds. Collapse them into one refresh.
+    let t: any = null;
+    const handler = () => {
+      clearTimeout(t);
+      t = setTimeout(() => refreshData(false), 150);
+    };
     window.addEventListener('db-connection-changed', handler);
-    return () => window.removeEventListener('db-connection-changed', handler);
-  }, []);
+    return () => {
+      window.removeEventListener('db-connection-changed', handler);
+      clearTimeout(t);
+    };
+  }, [refreshData]);
 
   const calculateTotalPoints = useCallback((assignedGoals: AssignedGoal[]) => {
     if (!assignedGoals || !masterGoals) return 0;
