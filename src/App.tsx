@@ -766,7 +766,7 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
       >
         <div className="relative mb-2 cursor-pointer group active:scale-95 transition-transform flex flex-col items-center">
           {config.crown}
-          <img src={student.photo} className={`${config.avatarSize} rounded-full object-cover border-[3px] md:border-4 ${config.border} shadow-lg group-hover:scale-105 transition-transform bg-base-100 relative z-10`} />
+          <img src={student.photo || undefined} alt={student.name} className={`${config.avatarSize} rounded-full object-cover border-[3px] md:border-4 ${config.border} shadow-lg group-hover:scale-105 transition-transform bg-base-100 relative z-10`} />
           <div className="absolute -bottom-2 md:-bottom-3 bg-base-900 text-white text-[10px] md:text-sm font-black px-2 md:px-3 py-0.5 rounded-full border-2 border-base-100 z-20 shadow-sm">
             #{config.rank}
           </div>
@@ -871,7 +871,7 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
                   </div>
                   
                   <div className="relative">
-                    <img src={student.photo} alt={student.name} className="w-12 h-12 md:w-14 md:h-14 rounded-full border border-base-200 shadow-sm object-cover" />
+                    <img src={student.photo || undefined} alt={student.name} className="w-12 h-12 md:w-14 md:h-14 rounded-full border border-base-200 shadow-sm object-cover" />
                   </div>
                   
                   <div className="flex-1 min-w-0 pr-2">
@@ -1082,7 +1082,7 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
         <div className="absolute top-0 left-0 w-full h-32 bg-primary-600 group-hover:h-36 transition-all duration-500"></div>
         <div className="relative z-10 flex flex-col items-center text-center mt-8">
           <div className="relative">
-            <img src={student.photo} alt={student.name} className="w-32 h-32 rounded-[2rem] border-8 border-base-100 shadow-2xl bg-base-100 object-cover" />
+            <img src={student.photo || undefined} alt={student.name} className="w-32 h-32 rounded-[2rem] border-8 border-base-100 shadow-2xl bg-base-100 object-cover" />
             <div className="absolute -bottom-2 -right-2 bg-accent-500 p-2 rounded-xl text-base-50 shadow-lg">
               <CheckSquare className="w-5 h-5" />
             </div>
@@ -1506,7 +1506,7 @@ function AdminStudentsTab({ students, refreshData, masterGoals, categories, calc
       <div className="space-y-3">
         {filtered.map((s: any, index: number) => (
           <div key={s.id || `student-${index}`} className="flex items-center gap-4 p-4 rounded-2xl border border-base-200 bg-base-100 hover:border-primary-200 transition-colors shadow-sm">
-            <img src={s.photo} className="w-12 h-12 rounded-xl bg-base-200" />
+            <img src={s.photo || undefined} alt={s.name} className="w-12 h-12 rounded-xl bg-base-200" />
             <div className="flex-1 min-w-0">
               <h4 className="font-bold text-text-main line-clamp-2 break-words leading-tight" title={s.name}>{s.name}</h4>
               <p className="text-[10px] font-black text-text-light uppercase tracking-widest mt-1 mb-1">{s.assignedGoals.length} Handled Goals</p>
@@ -1722,7 +1722,7 @@ function StudentAdminModal({ student, masterGoals, categories, onClose, onSave }
           <div className="w-full lg:w-80 space-y-6">
             <div className="text-center">
                <div className="relative inline-block group">
-                <img src={formData.photo} alt="Avatar" className="w-32 h-32 rounded-[2rem] border-4 border-slate-50 bg-base-200 shadow-md object-cover" />
+                <img src={formData.photo || undefined} alt="Avatar" className="w-32 h-32 rounded-[2rem] border-4 border-slate-50 bg-base-200 shadow-md object-cover" />
                 <button type="button" onClick={() => fileInputRef.current?.click()} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-base-900/60 p-3 rounded-full text-base-50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm shadow-xl" title="Upload Photo">
                   <ImageIcon className="w-6 h-6" />
                 </button>
@@ -2471,7 +2471,7 @@ function AdminAppearanceTab({ refreshData, appSettings, setAppSettings }: any) {
                 <div className="flex gap-4 items-center">
                   <div className="relative inline-block group">
                     {settings.logoUrl ? (
-                      <img src={settings.logoUrl} alt="Logo" className="w-20 h-20 rounded-2xl border-4 border-base-100 bg-base-200 shadow-sm object-cover" />
+                      <img src={settings.logoUrl || undefined} alt="Logo" className="w-20 h-20 rounded-2xl border-4 border-base-100 bg-base-200 shadow-sm object-cover" />
                     ) : (
                       <div className="w-20 h-20 rounded-2xl border-4 border-base-100 bg-base-200 shadow-sm flex items-center justify-center text-primary-500">
                         <ImageIcon className="w-8 h-8 opacity-50" />
@@ -2510,7 +2510,7 @@ function AdminAppearanceTab({ refreshData, appSettings, setAppSettings }: any) {
              <div className="bg-base-50 border border-base-200 rounded-2xl p-4 mb-4 shadow-sm flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {settings.logoUrl ? (
-                    <img src={settings.logoUrl} className="w-8 h-8 rounded-lg object-contain" />
+                    <img src={settings.logoUrl || undefined} alt="" className="w-8 h-8 rounded-lg object-contain" />
                   ) : (
                     <div className="bg-primary-600 p-2 rounded-lg"><Trophy className="w-4 h-4 text-base-50" /></div>
                   )}
@@ -2522,7 +2522,7 @@ function AdminAppearanceTab({ refreshData, appSettings, setAppSettings }: any) {
              {/* Preview: Hero */}
              <div className="bg-gradient-to-br from-primary-600 to-primary-800 p-8 rounded-[2rem] text-base-50 shadow-2xl relative overflow-hidden mb-6">
                 <div className="absolute top-0 right-0 opacity-20 transform translate-x-1/4 -translate-y-1/4 rotate-12 mix-blend-overlay">
-                  {settings.logoUrl ? <img src={settings.logoUrl} className="w-48 h-48" /> : <Trophy className="w-48 h-48" />}
+                  {settings.logoUrl ? <img src={settings.logoUrl || undefined} alt="" className="w-48 h-48" /> : <Trophy className="w-48 h-48" />}
                 </div>
                 <div className="relative z-10 space-y-3">
                   <div className="inline-flex items-center gap-2 px-3 py-1 bg-base-100/10 rounded-full text-[10px] font-bold uppercase tracking-widest backdrop-blur-sm">
