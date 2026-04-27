@@ -717,6 +717,54 @@ function formatCell(v: any) {
   return String(v);
 }
 
+/**
+ * Compact per-collection report for the Firebase test result. Each row shows
+ * read / write / delete dry-run status plus the underlying error when a
+ * Security Rule denied the operation.
+ */
+function FirestoreProbeReport({ probes }: { probes: FirestoreCollectionProbe[] }) {
+  return (
+    <div className="mt-2 rounded-lg border border-base-200 bg-base-100 overflow-hidden">
+      <table className="min-w-full text-[11px]">
+        <thead className="bg-base-200/60">
+          <tr>
+            <th className="text-left px-2 py-1 font-bold text-text-muted">Collection</th>
+            <th className="px-2 py-1 font-bold text-text-muted">Read</th>
+            <th className="px-2 py-1 font-bold text-text-muted">Write</th>
+            <th className="px-2 py-1 font-bold text-text-muted">Delete</th>
+            <th className="text-left px-2 py-1 font-bold text-text-muted">Docs</th>
+          </tr>
+        </thead>
+        <tbody>
+          {probes.map((p) => {
+            const firstErr = p.readError || p.writeError || p.deleteError;
+            return (
+              <React.Fragment key={p.name}>
+                <tr className="border-t border-base-200">
+                  <td className="px-2 py-1 font-mono text-text-main">{p.name}</td>
+                  <td className="px-2 py-1 text-center">{p.canRead ? "✓" : "✗"}</td>
+                  <td className="px-2 py-1 text-center">{p.canWrite ? "✓" : "✗"}</td>
+                  <td className="px-2 py-1 text-center">{p.canDelete ? "✓" : "—"}</td>
+                  <td className="px-2 py-1 text-text-muted">
+                    {p.canRead ? (p.exists ? p.docCount : "empty") : "—"}
+                  </td>
+                </tr>
+                {firstErr && (
+                  <tr className="bg-red-50/60">
+                    <td colSpan={5} className="px-2 py-1 text-red-700 font-mono break-all">
+                      {firstErr}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function RowEditor({
   row,
   isNew,
