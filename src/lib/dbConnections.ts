@@ -620,6 +620,57 @@ export async function connDeleteById(conn: DbConnection, table: string, id: stri
   if (error) throw error;
 }
 
+/**
+ * Seed a Firebase destination with placeholder documents so the canonical app
+ * collections are visible in the Firestore console. No-op for Supabase
+ * destinations.
+ */
+export async function bootstrapFirebaseSchema(
+  conn: DbConnection,
+  collections: string[] = FIREBASE_APP_COLLECTIONS,
+) {
+  if (conn.provider !== "firebase") {
+    throw new Error("bootstrapFirebaseSchema only supports Firebase connections");
+  }
+  const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+  return bootstrapFirestoreSchema(conn.id, cfg, collections);
+}
+
+/**
+ * Document-aware transfer for Firestore destinations. Honors id preservation
+ * and per-document conflict rules (merge / replace / skip). Falls back to the
+ * generic `connInsert` path for Supabase destinations.
+ */
+export async function connTransferRows(
+  dest: DbConnection,
+  table: string,
+  rows: any[],
+  opts: {
+    mode: "upsert" | "replace" | "skip";
+    /** When true and dest is Supabase, wipe destination table first. */
+    wipeBeforeReplace?: boolean;
+  },
+): Promise<{ written: number; skipped: number; created: number; errors: string[] }> {
+  if (dest.provider === "firebase") {
+    const cfg = dest.firebaseConfig || parseFirebaseConfig(dest.key);
+    const fsMode: FirestoreWriteMode =
+      opts.mode === "replace" ? "replace" : opts.mode === "skip" ? "skip" : "merge";
+    return fsTransfer(dest.id, cfg, table, rows, fsMode);
+  }
+  // Supabase path: replace = wipe + insert; skip not supported (PostgREST has
+  // no native "do nothing on conflict" via REST), so it degrades to upsert.
+  if (opts.mode === "replace" && opts.wipeBeforeReplace) {
+    await connDeleteAll(dest, table);
+  }
+  if (rows.length) {
+    await connInsert(dest, table, rows, {
+      upsert: opts.mode !== "replace" || !opts.wipeBeforeReplace,
+      onConflict: "id",
+    });
+  }
+  return { written: rows.length, skipped: 0, created: 0, errors: [] };
+}
+
 // SQL used to bootstrap the destination project with the same tables the
 // app expects. Safe to re-run (CREATE IF NOT EXISTS + RLS guard).
 export const APP_SCHEMA_SQL = `
