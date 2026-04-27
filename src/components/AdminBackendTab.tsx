@@ -37,6 +37,9 @@ import {
   callProxy,
   APP_SCHEMA_SQL,
   EXEC_SQL_BOOTSTRAP,
+  bootstrapFirebaseSchema,
+  connTransferRows,
+  type FirestoreCollectionProbe,
 } from "@/lib/dbConnections";
 
 const APP_TABLES = [
@@ -54,6 +57,7 @@ type ConnectionTestState = {
   ok: boolean;
   keyType?: DbKeyType;
   missingTables?: string[];
+  probes?: FirestoreCollectionProbe[];
 };
 
 const describeKeyType = (keyType?: DbKeyType) => {
@@ -178,6 +182,7 @@ function ConnectionsSection({
         ok: r.ok,
         keyType: r.keyType,
         missingTables: r.missingTables,
+        probes: r.probes,
       },
     }));
     setTesting(null);
@@ -270,6 +275,9 @@ function ConnectionsSection({
                     >
                       {testResult[c.id].message}
                     </p>
+                  )}
+                  {testResult[c.id]?.probes && testResult[c.id]!.probes!.length > 0 && (
+                    <FirestoreProbeReport probes={testResult[c.id]!.probes!} />
                   )}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
