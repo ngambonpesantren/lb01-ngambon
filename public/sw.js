@@ -5,7 +5,9 @@
 //   - network-first for HTML/JS/CSS/JSON  (always get fresh app shell)
 //   - cache-first for images/fonts/static (fast repeat loads)
 //   - never caches POST/PUT/DELETE or /api/*  (so CRUD never goes stale)
-const CACHE_VERSION = 'hub-v3';
+// Bump this whenever you change the SW so the cache health screen shows it.
+const CACHE_VERSION = 'hub-v4';
+const BUILD_ID = '__BUILD__';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
 self.addEventListener('install', (event) => {
@@ -32,6 +34,25 @@ self.addEventListener('message', (event) => {
       const keys = await caches.keys();
       await Promise.all(keys.map((k) => caches.delete(k)));
     })());
+  }
+  // Reply with version + cache info so the Cache Health tab can display it.
+  if (event.data === 'get-version') {
+    const port = event.ports && event.ports[0];
+    (async () => {
+      const cacheKeys = await caches.keys();
+      const payload = {
+        type: 'sw-version',
+        version: CACHE_VERSION,
+        buildId: BUILD_ID,
+        caches: cacheKeys,
+        scope: self.registration && self.registration.scope,
+      };
+      if (port) port.postMessage(payload);
+      else if (event.source) event.source.postMessage(payload);
+    })();
+  }
+  if (event.data === 'skip-waiting') {
+    self.skipWaiting();
   }
 });
 
