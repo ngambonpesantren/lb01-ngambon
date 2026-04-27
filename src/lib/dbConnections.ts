@@ -16,8 +16,14 @@ import {
   fsDeleteById,
   disposeFirestore,
   FIREBASE_APP_COLLECTIONS,
+  bootstrapFirestoreSchema,
+  fsTransfer,
+  type FirestoreCollectionProbe,
+  type FirestoreWriteMode,
   type FirebaseConfig,
 } from "@/lib/firestoreDriver";
+
+export type { FirestoreCollectionProbe, FirestoreWriteMode } from "@/lib/firestoreDriver";
 
 export type DbProvider = "supabase" | "firebase";
 
@@ -271,6 +277,7 @@ export async function testConnection(
   keyType: DbKeyType;
   tables: string[];
   missingTables: string[];
+  probes?: FirestoreCollectionProbe[];
 }> {
   if (conn.provider === "firebase") {
     const cfg = conn.firebaseConfig || (() => {
@@ -283,6 +290,7 @@ export async function testConnection(
         keyType: "unknown",
         tables: [],
         missingTables: expectedTables,
+        probes: [],
       };
     }
     const r = await testFirestore(conn.id, cfg, expectedTables);
@@ -292,6 +300,7 @@ export async function testConnection(
       keyType: "service_role", // treat firebase as fully-privileged for transfer flow
       tables: r.ok ? [...FIREBASE_APP_COLLECTIONS] : [],
       missingTables: r.missingTables,
+      probes: r.probes,
     };
   }
   const keyType = getConnectionKeyType(conn);
@@ -609,6 +618,57 @@ export async function connDeleteById(conn: DbConnection, table: string, id: stri
   }
   const { error } = await getClientFor(conn).from(table).delete().eq("id", id);
   if (error) throw error;
+}
+
+/**
+ * Seed a Firebase destination with placeholder documents so the canonical app
+ * collections are visible in the Firestore console. No-op for Supabase
+ * destinations.
+ */
+export async function bootstrapFirebaseSchema(
+  conn: DbConnection,
+  collections: string[] = FIREBASE_APP_COLLECTIONS,
+) {
+  if (conn.provider !== "firebase") {
+    throw new Error("bootstrapFirebaseSchema only supports Firebase connections");
+  }
+  const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+  return bootstrapFirestoreSchema(conn.id, cfg, collections);
+}
+
+/**
+ * Document-aware transfer for Firestore destinations. Honors id preservation
+ * and per-document conflict rules (merge / replace / skip). Falls back to the
+ * generic `connInsert` path for Supabase destinations.
+ */
+export async function connTransferRows(
+  dest: DbConnection,
+  table: string,
+  rows: any[],
+  opts: {
+    mode: "upsert" | "replace" | "skip";
+    /** When true and dest is Supabase, wipe destination table first. */
+    wipeBeforeReplace?: boolean;
+  },
+): Promise<{ written: number; skipped: number; created: number; errors: string[] }> {
+  if (dest.provider === "firebase") {
+    const cfg = dest.firebaseConfig || parseFirebaseConfig(dest.key);
+    const fsMode: FirestoreWriteMode =
+      opts.mode === "replace" ? "replace" : opts.mode === "skip" ? "skip" : "merge";
+    return fsTransfer(dest.id, cfg, table, rows, fsMode);
+  }
+  // Supabase path: replace = wipe + insert; skip not supported (PostgREST has
+  // no native "do nothing on conflict" via REST), so it degrades to upsert.
+  if (opts.mode === "replace" && opts.wipeBeforeReplace) {
+    await connDeleteAll(dest, table);
+  }
+  if (rows.length) {
+    await connInsert(dest, table, rows, {
+      upsert: opts.mode !== "replace" || !opts.wipeBeforeReplace,
+      onConflict: "id",
+    });
+  }
+  return { written: rows.length, skipped: 0, created: 0, errors: [] };
 }
 
 // SQL used to bootstrap the destination project with the same tables the

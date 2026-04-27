@@ -37,6 +37,9 @@ import {
   callProxy,
   APP_SCHEMA_SQL,
   EXEC_SQL_BOOTSTRAP,
+  bootstrapFirebaseSchema,
+  connTransferRows,
+  type FirestoreCollectionProbe,
 } from "@/lib/dbConnections";
 
 const APP_TABLES = [
@@ -54,6 +57,7 @@ type ConnectionTestState = {
   ok: boolean;
   keyType?: DbKeyType;
   missingTables?: string[];
+  probes?: FirestoreCollectionProbe[];
 };
 
 const describeKeyType = (keyType?: DbKeyType) => {
@@ -178,6 +182,7 @@ function ConnectionsSection({
         ok: r.ok,
         keyType: r.keyType,
         missingTables: r.missingTables,
+        probes: r.probes,
       },
     }));
     setTesting(null);
@@ -270,6 +275,9 @@ function ConnectionsSection({
                     >
                       {testResult[c.id].message}
                     </p>
+                  )}
+                  {testResult[c.id]?.probes && testResult[c.id]!.probes!.length > 0 && (
+                    <FirestoreProbeReport probes={testResult[c.id]!.probes!} />
                   )}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -709,6 +717,54 @@ function formatCell(v: any) {
   return String(v);
 }
 
+/**
+ * Compact per-collection report for the Firebase test result. Each row shows
+ * read / write / delete dry-run status plus the underlying error when a
+ * Security Rule denied the operation.
+ */
+function FirestoreProbeReport({ probes }: { probes: FirestoreCollectionProbe[] }) {
+  return (
+    <div className="mt-2 rounded-lg border border-base-200 bg-base-100 overflow-hidden">
+      <table className="min-w-full text-[11px]">
+        <thead className="bg-base-200/60">
+          <tr>
+            <th className="text-left px-2 py-1 font-bold text-text-muted">Collection</th>
+            <th className="px-2 py-1 font-bold text-text-muted">Read</th>
+            <th className="px-2 py-1 font-bold text-text-muted">Write</th>
+            <th className="px-2 py-1 font-bold text-text-muted">Delete</th>
+            <th className="text-left px-2 py-1 font-bold text-text-muted">Docs</th>
+          </tr>
+        </thead>
+        <tbody>
+          {probes.map((p) => {
+            const firstErr = p.readError || p.writeError || p.deleteError;
+            return (
+              <React.Fragment key={p.name}>
+                <tr className="border-t border-base-200">
+                  <td className="px-2 py-1 font-mono text-text-main">{p.name}</td>
+                  <td className="px-2 py-1 text-center">{p.canRead ? "✓" : "✗"}</td>
+                  <td className="px-2 py-1 text-center">{p.canWrite ? "✓" : "✗"}</td>
+                  <td className="px-2 py-1 text-center">{p.canDelete ? "✓" : "—"}</td>
+                  <td className="px-2 py-1 text-text-muted">
+                    {p.canRead ? (p.exists ? p.docCount : "empty") : "—"}
+                  </td>
+                </tr>
+                {firstErr && (
+                  <tr className="bg-red-50/60">
+                    <td colSpan={5} className="px-2 py-1 text-red-700 font-mono break-all">
+                      {firstErr}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function RowEditor({
   row,
   isNew,
@@ -783,7 +839,7 @@ function TransferSection({
   const [sourceId, setSourceId] = useState<string>(connections[0]?.id || DEFAULT_CONNECTION_ID);
   const [destId, setDestId] = useState<string>(connections[1]?.id || connections[0]?.id || "");
   const [tables, setTables] = useState<string[]>(["students", "master_goals", "categories"]);
-  const [mode, setMode] = useState<"replace" | "upsert">("upsert");
+  const [mode, setMode] = useState<"replace" | "upsert" | "skip">("upsert");
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<string[]>([]);
 
@@ -809,7 +865,10 @@ function TransferSection({
       return;
     }
     if (mode === "replace") {
-      if (!confirm(`This will DELETE all rows in [${tables.join(", ")}] on the destination. Continue?`)) return;
+      const where = dest?.provider === "firebase"
+        ? "overwrite documents with the same id (other fields removed)"
+        : `DELETE all rows in [${tables.join(", ")}] on the destination`;
+      if (!confirm(`This will ${where}. Continue?`)) return;
     }
     if (!source || !dest) {
       alert("Choose both source and destination connections.");
@@ -859,15 +918,32 @@ function TransferSection({
         append(`→ ${t}: reading from ${source.label}…`);
         const rows = await connSelect(source, t);
         append(`   ${rows.length} row(s) fetched.`);
-        if (mode === "replace") {
-          append(`   wiping destination…`);
-          await connDeleteAll(dest, t);
+        if (dest.provider === "firebase") {
+          append(
+            `   ${mode === "replace" ? "overwriting" : mode === "skip" ? "writing only new docs" : "merging"} ${rows.length} doc(s) in ${dest.label}…`,
+          );
+          const stats = await connTransferRows(dest, t, rows, { mode });
+          append(
+            `✓ ${t} — written:${stats.written} created:${stats.created} skipped:${stats.skipped}` +
+              (stats.errors.length ? ` errors:${stats.errors.length}` : ""),
+          );
+          stats.errors.slice(0, 5).forEach((e) => append(`   ⚠ ${e}`));
+        } else {
+          if (mode === "replace") {
+            append(`   wiping destination…`);
+            await connDeleteAll(dest, t);
+          }
+          if (rows.length) {
+            append(
+              `   ${mode === "upsert" ? "upserting" : mode === "skip" ? "upserting (skip→upsert on Postgres)" : "inserting"} into ${dest.label}…`,
+            );
+            await connInsert(dest, t, rows, {
+              upsert: mode !== "replace",
+              onConflict: "id",
+            });
+          }
+          append(`✓ ${t} done.`);
         }
-        if (rows.length) {
-          append(`   ${mode === "upsert" ? "upserting" : "inserting"} into ${dest.label}…`);
-          await connInsert(dest, t, rows, { upsert: mode === "upsert", onConflict: "id" });
-        }
-        append(`✓ ${t} done.`);
       } catch (e: any) {
         append(`✗ ${t} failed: ${e?.message || e}`);
       }
@@ -882,7 +958,23 @@ function TransferSection({
   const bootstrap = async () => {
     if (!dest) return;
     if (dest.provider === "firebase") {
-      alert("Firestore is schemaless — no schema bootstrap needed.");
+      setBootstrapBusy(true);
+      setLog([]);
+      const append = (m: string) => setLog((l) => [...l, m]);
+      append(`Seeding Firestore collections on ${dest.label}…`);
+      try {
+        const results = await bootstrapFirebaseSchema(dest, tables.length ? tables : APP_TABLES);
+        results.forEach((r) => {
+          if (!r.ok) append(`✗ ${r.name}: ${r.error}`);
+          else if (r.created) append(`✓ ${r.name} — created __schema__ doc with default fields`);
+          else append(`• ${r.name} — already has data, left untouched`);
+        });
+        append("Done. Collections are now visible in the Firebase console.");
+      } catch (e: any) {
+        append(`✗ Firebase bootstrap failed: ${e?.message || e}`);
+      } finally {
+        setBootstrapBusy(false);
+      }
       return;
     }
     if (getConnectionKeyType(dest) !== "service_role") {
@@ -960,7 +1052,7 @@ function TransferSection({
       <div>
         <p className="text-xs font-bold text-text-muted mb-1">Mode</p>
         <div className="flex gap-2">
-          {(["upsert", "replace"] as const).map((m) => (
+          {(["upsert", "replace", "skip"] as const).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -970,10 +1062,23 @@ function TransferSection({
                   : "bg-base-100 text-text-muted border border-base-200 hover:bg-base-200"
               }`}
             >
-              {m === "upsert" ? "Merge (upsert by id)" : "Replace (wipe + insert)"}
+              {m === "upsert"
+                ? "Merge (upsert by id)"
+                : m === "replace"
+                  ? dest?.provider === "firebase"
+                    ? "Replace (overwrite docs)"
+                    : "Replace (wipe + insert)"
+                  : "Skip existing (id collision)"}
             </button>
           ))}
         </div>
+        {mode === "skip" && dest?.provider !== "firebase" && (
+          <p className="text-[11px] text-text-muted mt-1">
+            "Skip" maps to upsert on Postgres destinations (PostgREST has no
+            native do-nothing-on-conflict). Use a Firebase destination for true
+            id-collision skipping.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
