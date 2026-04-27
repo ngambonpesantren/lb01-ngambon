@@ -1052,7 +1052,7 @@ function TransferSection({
       <div>
         <p className="text-xs font-bold text-text-muted mb-1">Mode</p>
         <div className="flex gap-2">
-          {(["upsert", "replace"] as const).map((m) => (
+          {(["upsert", "replace", "skip"] as const).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -1062,10 +1062,23 @@ function TransferSection({
                   : "bg-base-100 text-text-muted border border-base-200 hover:bg-base-200"
               }`}
             >
-              {m === "upsert" ? "Merge (upsert by id)" : "Replace (wipe + insert)"}
+              {m === "upsert"
+                ? "Merge (upsert by id)"
+                : m === "replace"
+                  ? dest?.provider === "firebase"
+                    ? "Replace (overwrite docs)"
+                    : "Replace (wipe + insert)"
+                  : "Skip existing (id collision)"}
             </button>
           ))}
         </div>
+        {mode === "skip" && dest?.provider !== "firebase" && (
+          <p className="text-[11px] text-text-muted mt-1">
+            "Skip" maps to upsert on Postgres destinations (PostgREST has no
+            native do-nothing-on-conflict). Use a Firebase destination for true
+            id-collision skipping.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
