@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-50: var(--theme-primary-50, #ecfdf5);
+  --color-primary-100: var(--theme-primary-100, #d1fae5);
+  --color-primary-200: var(--theme-primary-200, #a7f3d0);
+  --color-primary-400: var(--theme-primary-400, #34d399);
+  --color-primary-500: var(--theme-primary-500, #10b981);
+  --color-primary-600: var(--theme-primary-600, #059669);
+  --color-primary-700: var(--theme-primary-700, #047857);
+  --color-primary-800: var(--theme-primary-800, #065f46);
+  --color-primary-900: var(--theme-primary-900, #064e3b);
+
+  --color-accent-50: var(--theme-accent-50, #fffbeb);
+  --color-accent-100: var(--theme-accent-100, #fef3c7);
+  --color-accent-500: var(--theme-accent-500, #f59e0b);
+  --color-accent-600: var(--theme-accent-600, #d97706);
+
+  --color-base-50: var(--theme-base-50, #faf8f5);
+  --color-base-100: var(--theme-base-100, #f5f0e6);
+  --color-base-200: var(--theme-base-200, #e7e0d3);
+  --color-base-300: var(--theme-base-300, #d4c7b3);
+  --color-base-800: var(--theme-base-800, #3d3425);
+  --color-base-900: var(--theme-base-900, #30291e);
+
+  --color-text-main: var(--theme-text-main, #30291e);
+  --color-text-muted: var(--theme-text-muted, #615541);
+  --color-text-light: var(--theme-text-light, #a89a83);
+}
+
+body {
+  background-color: var(--color-base-50);
+  color: var(--color-text-main);
+}
+
+/* Custom Modern Scrollbar */
+html {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-primary-500) 50%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--color-primary-500) 50%, transparent);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--color-primary-500) 90%, transparent);
+}
+
+/* Sembunyikan scrollbar untuk Chrome, Safari, dan Opera (Webkit) */
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+  opacity: 0;
+}
+
+/* Sembunyikan scrollbar untuk IE, Edge, dan Firefox */
+.no-scrollbar,
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE dan Edge */
+  scrollbar-width: none;  /* Firefox */
+}
