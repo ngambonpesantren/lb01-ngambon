@@ -345,10 +345,12 @@ function ConnectionsSection({
 
 function ConnectionForm({
   initial,
+  provider,
   onClose,
   onSaved,
 }: {
   initial: DbConnection | null;
+  provider: "supabase" | "firebase";
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
@@ -359,20 +361,31 @@ function ConnectionForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isFirebase = provider === "firebase";
+
   const submit = async () => {
     setError(null);
-    if (!url.startsWith("http")) {
-      setError("URL must start with https://");
-      return;
-    }
-    if (!key || key.length < 20) {
-      setError("Key looks invalid.");
-      return;
+    if (isFirebase) {
+      if (!key.trim()) {
+        setError("Paste your Firebase config JSON.");
+        return;
+      }
+    } else {
+      if (!url.startsWith("http")) {
+        setError("URL must start with https://");
+        return;
+      }
+      if (!key || key.length < 20) {
+        setError("Key looks invalid.");
+        return;
+      }
     }
     setBusy(true);
     try {
       if (initial) {
         updateConnection(initial.id, { label, url, key });
+      } else if (isFirebase) {
+        addFirebaseConnection({ label, config: key });
       } else {
         addConnection({ label, url, key });
       }
@@ -389,7 +402,11 @@ function ConnectionForm({
       <div className="bg-base-100 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-xl">
         <div className="flex items-center justify-between">
           <h4 className="font-black text-text-main">
-            {initial ? "Edit connection" : "Add Supabase project"}
+            {initial
+              ? "Edit connection"
+              : isFirebase
+                ? "Add Firebase project"
+                : "Add Supabase project"}
           </h4>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-base-200">
             <X className="w-4 h-4" />
@@ -401,38 +418,59 @@ function ConnectionForm({
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder="My Supabase Project"
+            placeholder={isFirebase ? "My Firebase Project" : "My Supabase Project"}
             className="mt-1 w-full px-3 py-2 rounded-xl border border-base-200 bg-base-100 text-sm font-medium"
           />
         </label>
-        <label className="block text-xs font-bold text-text-muted">
-          Project URL
-          <input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://xxxx.supabase.co"
-            className="mt-1 w-full px-3 py-2 rounded-xl border border-base-200 bg-base-100 text-sm font-mono"
-          />
-        </label>
-        <label className="block text-xs font-bold text-text-muted">
-          Service-role key
-          <div className="mt-1 relative">
+        {!isFirebase && (
+          <label className="block text-xs font-bold text-text-muted">
+            Project URL
             <input
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              type={showKey ? "text" : "password"}
-              placeholder="eyJhbGciOi..."
-              className="w-full px-3 py-2 pr-10 rounded-xl border border-base-200 bg-base-100 text-sm font-mono"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://xxxx.supabase.co"
+              className="mt-1 w-full px-3 py-2 rounded-xl border border-base-200 bg-base-100 text-sm font-mono"
             />
-            <button
-              type="button"
-              onClick={() => setShowKey((s) => !s)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-base-200"
-            >
-              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+          </label>
+        )}
+        <label className="block text-xs font-bold text-text-muted">
+          {isFirebase ? "Firebase config (JSON)" : "Service-role key"}
+          <div className="mt-1 relative">
+            {isFirebase ? (
+              <textarea
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                rows={8}
+                placeholder={`{\n  "apiKey": "AIza...",\n  "authDomain": "my-app.firebaseapp.com",\n  "projectId": "my-app",\n  "storageBucket": "my-app.appspot.com",\n  "messagingSenderId": "123",\n  "appId": "1:123:web:abc"\n}`}
+                className="w-full px-3 py-2 rounded-xl border border-base-200 bg-base-100 text-xs font-mono"
+              />
+            ) : (
+              <>
+                <input
+                  value={key}
+                  onChange={(e) => setKey(e.target.value)}
+                  type={showKey ? "text" : "password"}
+                  placeholder="eyJhbGciOi..."
+                  className="w-full px-3 py-2 pr-10 rounded-xl border border-base-200 bg-base-100 text-sm font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey((s) => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-base-200"
+                >
+                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </>
+            )}
           </div>
         </label>
+        {isFirebase && (
+          <p className="text-[11px] text-text-muted">
+            Paste the Firebase web app config object from your Firebase console
+            (Project settings → SDK setup → Config). Access is gated by
+            Firestore security rules.
+          </p>
+        )}
 
         {error && <p className="text-xs text-red-600 font-bold">{error}</p>}
 
