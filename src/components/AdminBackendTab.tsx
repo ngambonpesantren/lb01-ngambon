@@ -243,6 +243,9 @@ function ConnectionsSection({
       </div>
 
       <ul className="space-y-3">
+        {firstPaint && connections.length === 0 && (
+          <ConnectionListSkeleton rows={2} />
+        )}
         {connections.map((c) => {
           const isActive = c.id === activeId;
           return (
