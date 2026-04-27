@@ -823,7 +823,11 @@ function TransferSection({
 
     const destTest = await testConnection(dest, tables);
     append(`Destination: ${dest.label}`);
-    append(`Key type: ${describeKeyType(destKeyType)}`);
+    append(
+      dest.provider === "firebase"
+        ? `Provider: Firebase (Firestore)`
+        : `Key type: ${describeKeyType(destKeyType)}`,
+    );
 
     if (!destTest.ok) {
       append(`✗ Destination connection failed: ${destTest.error || "Unknown error"}`);
@@ -831,7 +835,7 @@ function TransferSection({
       return;
     }
 
-    if (destKeyType !== "service_role") {
+    if (dest.provider !== "firebase" && destKeyType !== "service_role") {
       append(
         "✗ Destination key is not a service-role key. Use a service-role key to create, replace, or fully sync data.",
       );
@@ -839,7 +843,7 @@ function TransferSection({
       return;
     }
 
-    if (destTest.missingTables.length) {
+    if (dest.provider !== "firebase" && destTest.missingTables.length) {
       append(
         `✗ Destination is missing required tables: ${destTest.missingTables.join(", ")}`,
       );
@@ -877,6 +881,10 @@ function TransferSection({
 
   const bootstrap = async () => {
     if (!dest) return;
+    if (dest.provider === "firebase") {
+      alert("Firestore is schemaless — no schema bootstrap needed.");
+      return;
+    }
     if (getConnectionKeyType(dest) !== "service_role") {
       alert("Destination must use a service-role key.");
       return;
