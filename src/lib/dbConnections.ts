@@ -16,8 +16,14 @@ import {
   fsDeleteById,
   disposeFirestore,
   FIREBASE_APP_COLLECTIONS,
+  bootstrapFirestoreSchema,
+  fsTransfer,
+  type FirestoreCollectionProbe,
+  type FirestoreWriteMode,
   type FirebaseConfig,
 } from "@/lib/firestoreDriver";
+
+export type { FirestoreCollectionProbe, FirestoreWriteMode } from "@/lib/firestoreDriver";
 
 export type DbProvider = "supabase" | "firebase";
 
@@ -271,6 +277,7 @@ export async function testConnection(
   keyType: DbKeyType;
   tables: string[];
   missingTables: string[];
+  probes?: FirestoreCollectionProbe[];
 }> {
   if (conn.provider === "firebase") {
     const cfg = conn.firebaseConfig || (() => {
@@ -283,6 +290,7 @@ export async function testConnection(
         keyType: "unknown",
         tables: [],
         missingTables: expectedTables,
+        probes: [],
       };
     }
     const r = await testFirestore(conn.id, cfg, expectedTables);
@@ -292,6 +300,7 @@ export async function testConnection(
       keyType: "service_role", // treat firebase as fully-privileged for transfer flow
       tables: r.ok ? [...FIREBASE_APP_COLLECTIONS] : [],
       missingTables: r.missingTables,
+      probes: r.probes,
     };
   }
   const keyType = getConnectionKeyType(conn);
