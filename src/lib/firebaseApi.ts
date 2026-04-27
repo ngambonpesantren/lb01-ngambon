@@ -33,6 +33,34 @@ const fail = (status: number, message: string): Response =>
     headers: { "Content-Type": "application/json" },
   });
 
+// Run an array of async tasks with a hard concurrency cap. Used to throttle
+// bulk operations (rank snapshots, bulk imports) that would otherwise fire
+// hundreds of parallel writes and exhaust connection pools / hit rate limits
+// — the exact failure mode that was producing buffering and white screens.
+async function runWithConcurrency<T, R>(
+  items: T[],
+  worker: (item: T, idx: number) => Promise<R>,
+  limit = 4,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  async function next() {
+    while (cursor < items.length) {
+      const i = cursor++;
+      try {
+        results[i] = await worker(items[i], i);
+      } catch (err) {
+        // Don't let one bad row poison the whole batch.
+        results[i] = undefined as any;
+        console.warn('batch worker failed at index', i, err);
+      }
+    }
+  }
+  const runners = Array.from({ length: Math.min(limit, items.length) }, () => next());
+  await Promise.all(runners);
+  return results;
+}
+
 // --- Mappers between DB (snake_case) and app (camelCase) ---
 const mapStudentRow = (r: any) => ({
   id: r.id,
@@ -265,12 +293,14 @@ export async function firebaseApiFetch(
           return { id: s.id, pts };
         })
         .sort((a: any, b: any) => b.pts - a.pts);
-      await Promise.all(
-        ranked.map((s: any, idx: number) =>
+      // Cap at 4 concurrent UPDATEs so we don't flood the DB / proxy.
+      await runWithConcurrency(
+        ranked,
+        (s: any, idx: number) =>
           connUpdate(conn, "students", `id=eq.${s.id}`, {
             previous_rank: idx + 1,
           }),
-        ),
+        4,
       );
       return ok();
     }
