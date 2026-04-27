@@ -150,6 +150,7 @@ function ConnectionsSection({
   onChanged: () => Promise<void> | void;
 }) {
   const [showAdd, setShowAdd] = useState(false);
+  const [addProvider, setAddProvider] = useState<"supabase" | "firebase">("supabase");
   const [editing, setEditing] = useState<DbConnection | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, ConnectionTestState>>({});
@@ -163,7 +164,8 @@ function ConnectionsSection({
   const handleTest = async (conn: DbConnection) => {
     setTesting(conn.id);
     const r = await testConnection(conn, APP_TABLES);
-    const keyTypeLabel = describeKeyType(r.keyType);
+    const keyTypeLabel =
+      conn.provider === "firebase" ? "Firebase config" : describeKeyType(r.keyType);
     const summary = r.ok
       ? r.missingTables.length
         ? `Connected via ${keyTypeLabel} — missing app tables: ${r.missingTables.join(", ")}`
@@ -190,15 +192,28 @@ function ConnectionsSection({
             The active connection is used by the entire app.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setEditing(null);
-            setShowAdd(true);
-          }}
-          className="bg-primary-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-primary-700 active:scale-95 transition-all"
-        >
-          <Plus className="w-4 h-4" /> Add Supabase
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => {
+              setEditing(null);
+              setAddProvider("supabase");
+              setShowAdd(true);
+            }}
+            className="bg-primary-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-primary-700 active:scale-95 transition-all"
+          >
+            <Plus className="w-4 h-4" /> Add Supabase
+          </button>
+          <button
+            onClick={() => {
+              setEditing(null);
+              setAddProvider("firebase");
+              setShowAdd(true);
+            }}
+            className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-amber-600 active:scale-95 transition-all"
+          >
+            <Plus className="w-4 h-4" /> Add Firebase
+          </button>
+        </div>
       </div>
 
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 flex gap-2 text-xs text-amber-900">
@@ -226,6 +241,15 @@ function ConnectionsSection({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-text-main truncate">{c.label}</span>
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                        c.provider === "firebase"
+                          ? "text-amber-700 bg-amber-100"
+                          : "text-sky-700 bg-sky-100"
+                      }`}
+                    >
+                      {describeProvider(c)}
+                    </span>
                     {isActive && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-primary-700 bg-primary-100 px-2 py-0.5 rounded-full">
                         <CheckCircle2 className="w-3 h-3" /> Active
@@ -303,6 +327,7 @@ function ConnectionsSection({
       {showAdd && (
         <ConnectionForm
           initial={editing}
+          provider={editing?.provider || addProvider}
           onClose={() => {
             setShowAdd(false);
             setEditing(null);
