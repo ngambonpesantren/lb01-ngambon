@@ -1148,6 +1148,7 @@ function TransferSection({
         </div>
       )}
 
+      {busy && log.length === 0 && <TransferLogSkeleton lines={8} />}
       {log.length > 0 && (
         <pre className="bg-base-100 border border-base-200 rounded-xl p-3 text-[11px] font-mono text-text-main max-h-72 overflow-auto whitespace-pre-wrap">
           {log.join("\n")}
