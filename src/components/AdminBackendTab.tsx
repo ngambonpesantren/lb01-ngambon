@@ -839,7 +839,7 @@ function TransferSection({
   const [sourceId, setSourceId] = useState<string>(connections[0]?.id || DEFAULT_CONNECTION_ID);
   const [destId, setDestId] = useState<string>(connections[1]?.id || connections[0]?.id || "");
   const [tables, setTables] = useState<string[]>(["students", "master_goals", "categories"]);
-  const [mode, setMode] = useState<"replace" | "upsert">("upsert");
+  const [mode, setMode] = useState<"replace" | "upsert" | "skip">("upsert");
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<string[]>([]);
 
@@ -865,7 +865,10 @@ function TransferSection({
       return;
     }
     if (mode === "replace") {
-      if (!confirm(`This will DELETE all rows in [${tables.join(", ")}] on the destination. Continue?`)) return;
+      const where = dest?.provider === "firebase"
+        ? "overwrite documents with the same id (other fields removed)"
+        : `DELETE all rows in [${tables.join(", ")}] on the destination`;
+      if (!confirm(`This will ${where}. Continue?`)) return;
     }
     if (!source || !dest) {
       alert("Choose both source and destination connections.");
@@ -915,15 +918,32 @@ function TransferSection({
         append(`→ ${t}: reading from ${source.label}…`);
         const rows = await connSelect(source, t);
         append(`   ${rows.length} row(s) fetched.`);
-        if (mode === "replace") {
-          append(`   wiping destination…`);
-          await connDeleteAll(dest, t);
+        if (dest.provider === "firebase") {
+          append(
+            `   ${mode === "replace" ? "overwriting" : mode === "skip" ? "writing only new docs" : "merging"} ${rows.length} doc(s) in ${dest.label}…`,
+          );
+          const stats = await connTransferRows(dest, t, rows, { mode });
+          append(
+            `✓ ${t} — written:${stats.written} created:${stats.created} skipped:${stats.skipped}` +
+              (stats.errors.length ? ` errors:${stats.errors.length}` : ""),
+          );
+          stats.errors.slice(0, 5).forEach((e) => append(`   ⚠ ${e}`));
+        } else {
+          if (mode === "replace") {
+            append(`   wiping destination…`);
+            await connDeleteAll(dest, t);
+          }
+          if (rows.length) {
+            append(
+              `   ${mode === "upsert" ? "upserting" : mode === "skip" ? "upserting (skip→upsert on Postgres)" : "inserting"} into ${dest.label}…`,
+            );
+            await connInsert(dest, t, rows, {
+              upsert: mode !== "replace",
+              onConflict: "id",
+            });
+          }
+          append(`✓ ${t} done.`);
         }
-        if (rows.length) {
-          append(`   ${mode === "upsert" ? "upserting" : "inserting"} into ${dest.label}…`);
-          await connInsert(dest, t, rows, { upsert: mode === "upsert", onConflict: "id" });
-        }
-        append(`✓ ${t} done.`);
       } catch (e: any) {
         append(`✗ ${t} failed: ${e?.message || e}`);
       }
@@ -938,7 +958,23 @@ function TransferSection({
   const bootstrap = async () => {
     if (!dest) return;
     if (dest.provider === "firebase") {
-      alert("Firestore is schemaless — no schema bootstrap needed.");
+      setBootstrapBusy(true);
+      setLog([]);
+      const append = (m: string) => setLog((l) => [...l, m]);
+      append(`Seeding Firestore collections on ${dest.label}…`);
+      try {
+        const results = await bootstrapFirebaseSchema(dest, tables.length ? tables : APP_TABLES);
+        results.forEach((r) => {
+          if (!r.ok) append(`✗ ${r.name}: ${r.error}`);
+          else if (r.created) append(`✓ ${r.name} — created __schema__ doc with default fields`);
+          else append(`• ${r.name} — already has data, left untouched`);
+        });
+        append("Done. Collections are now visible in the Firebase console.");
+      } catch (e: any) {
+        append(`✗ Firebase bootstrap failed: ${e?.message || e}`);
+      } finally {
+        setBootstrapBusy(false);
+      }
       return;
     }
     if (getConnectionKeyType(dest) !== "service_role") {
