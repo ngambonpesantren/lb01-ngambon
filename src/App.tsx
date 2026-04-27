@@ -407,7 +407,7 @@ export default function App() {
               onClick={() => navigateTo('/')}
             >
               {appSettings.logoUrl ? (
-                <img src={appSettings.logoUrl} alt="Logo" className="h-10 w-10 object-contain rounded-xl" />
+                <img src={appSettings.logoUrl || undefined} alt="Logo" className="h-10 w-10 object-contain rounded-xl" />
               ) : (
                 <div className="bg-primary-600 p-2 rounded-xl group-hover:rotate-6 transition-transform">
                   <Trophy className="h-6 w-6 text-base-50" />
@@ -525,7 +525,7 @@ export default function App() {
 
         {appSettings?.logoUrl ? (
           <div className="w-16 h-16 -mt-8 rounded-full border-4 border-base-200 bg-base-100 shadow-sm flex items-center justify-center overflow-hidden z-10 cursor-pointer active:scale-95 transition-transform" onClick={() => navigateTo('/')}>
-             <img src={appSettings.logoUrl} className="w-full h-full object-cover" />
+             <img src={appSettings.logoUrl || undefined} alt="" className="w-full h-full object-cover" />
           </div>
         ) : (
           <div className="w-16 h-16 -mt-8 rounded-full border-4 border-base-200 bg-base-100 shadow-sm flex items-center justify-center z-10 text-primary-500 cursor-pointer active:scale-95 transition-transform" onClick={() => navigateTo('/')}>
@@ -585,7 +585,7 @@ function LoginPage({ onLogin, appSettings }: { onLogin: () => void, appSettings?
       <div className="bg-base-100 rounded-3xl p-8 shadow-xl border border-base-200">
         <div className="text-center mb-8">
           {appSettings?.logoUrl ? (
-            <img src={appSettings.logoUrl} alt="Logo" className="w-20 h-20 object-contain mx-auto mb-4" />
+            <img src={appSettings.logoUrl || undefined} alt="Logo" className="w-20 h-20 object-contain mx-auto mb-4" />
           ) : (
             <div className="w-16 h-16 bg-primary-600 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary-200">
               <Settings className="w-8 h-8 text-base-50" />
