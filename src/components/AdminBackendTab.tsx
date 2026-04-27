@@ -667,6 +667,9 @@ function CrudSection({
         </div>
       )}
 
+      {loading && rows.length === 0 ? (
+        <CrudTableSkeleton rows={6} cols={Math.max(columns.length || 4, 4)} />
+      ) : (
       <div className="overflow-x-auto rounded-xl border border-base-200">
         <table className="min-w-full text-xs">
           <thead className="bg-base-200/60">
@@ -713,6 +716,7 @@ function CrudSection({
           </tbody>
         </table>
       </div>
+      )}
 
       {editing && (
         <RowEditor
