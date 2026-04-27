@@ -20,6 +20,7 @@ import {
   getActiveId,
   setActive,
   addConnection,
+  addFirebaseConnection,
   updateConnection,
   removeConnection,
   testConnection,
@@ -60,6 +61,9 @@ const describeKeyType = (keyType?: DbKeyType) => {
   if (keyType === "publishable") return "publishable key";
   return "unknown key type";
 };
+
+const describeProvider = (conn: DbConnection) =>
+  conn.provider === "firebase" ? "Firebase (Firestore)" : "Supabase (Postgres)";
 
 type Props = {
   refreshData: () => Promise<void> | void;
@@ -146,6 +150,7 @@ function ConnectionsSection({
   onChanged: () => Promise<void> | void;
 }) {
   const [showAdd, setShowAdd] = useState(false);
+  const [addProvider, setAddProvider] = useState<"supabase" | "firebase">("supabase");
   const [editing, setEditing] = useState<DbConnection | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, ConnectionTestState>>({});
@@ -159,7 +164,8 @@ function ConnectionsSection({
   const handleTest = async (conn: DbConnection) => {
     setTesting(conn.id);
     const r = await testConnection(conn, APP_TABLES);
-    const keyTypeLabel = describeKeyType(r.keyType);
+    const keyTypeLabel =
+      conn.provider === "firebase" ? "Firebase config" : describeKeyType(r.keyType);
     const summary = r.ok
       ? r.missingTables.length
         ? `Connected via ${keyTypeLabel} — missing app tables: ${r.missingTables.join(", ")}`
@@ -186,15 +192,28 @@ function ConnectionsSection({
             The active connection is used by the entire app.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setEditing(null);
-            setShowAdd(true);
-          }}
-          className="bg-primary-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-primary-700 active:scale-95 transition-all"
-        >
-          <Plus className="w-4 h-4" /> Add Supabase
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => {
+              setEditing(null);
+              setAddProvider("supabase");
+              setShowAdd(true);
+            }}
+            className="bg-primary-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-primary-700 active:scale-95 transition-all"
+          >
+            <Plus className="w-4 h-4" /> Add Supabase
+          </button>
+          <button
+            onClick={() => {
+              setEditing(null);
+              setAddProvider("firebase");
+              setShowAdd(true);
+            }}
+            className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-amber-600 active:scale-95 transition-all"
+          >
+            <Plus className="w-4 h-4" /> Add Firebase
+          </button>
+        </div>
       </div>
 
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 flex gap-2 text-xs text-amber-900">
@@ -222,6 +241,15 @@ function ConnectionsSection({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-text-main truncate">{c.label}</span>
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                        c.provider === "firebase"
+                          ? "text-amber-700 bg-amber-100"
+                          : "text-sky-700 bg-sky-100"
+                      }`}
+                    >
+                      {describeProvider(c)}
+                    </span>
                     {isActive && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-primary-700 bg-primary-100 px-2 py-0.5 rounded-full">
                         <CheckCircle2 className="w-3 h-3" /> Active
@@ -299,6 +327,7 @@ function ConnectionsSection({
       {showAdd && (
         <ConnectionForm
           initial={editing}
+          provider={editing?.provider || addProvider}
           onClose={() => {
             setShowAdd(false);
             setEditing(null);
@@ -316,10 +345,12 @@ function ConnectionsSection({
 
 function ConnectionForm({
   initial,
+  provider,
   onClose,
   onSaved,
 }: {
   initial: DbConnection | null;
+  provider: "supabase" | "firebase";
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
@@ -330,20 +361,31 @@ function ConnectionForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isFirebase = provider === "firebase";
+
   const submit = async () => {
     setError(null);
-    if (!url.startsWith("http")) {
-      setError("URL must start with https://");
-      return;
-    }
-    if (!key || key.length < 20) {
-      setError("Key looks invalid.");
-      return;
+    if (isFirebase) {
+      if (!key.trim()) {
+        setError("Paste your Firebase config JSON.");
+        return;
+      }
+    } else {
+      if (!url.startsWith("http")) {
+        setError("URL must start with https://");
+        return;
+      }
+      if (!key || key.length < 20) {
+        setError("Key looks invalid.");
+        return;
+      }
     }
     setBusy(true);
     try {
       if (initial) {
         updateConnection(initial.id, { label, url, key });
+      } else if (isFirebase) {
+        addFirebaseConnection({ label, config: key });
       } else {
         addConnection({ label, url, key });
       }
@@ -360,7 +402,11 @@ function ConnectionForm({
       <div className="bg-base-100 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-xl">
         <div className="flex items-center justify-between">
           <h4 className="font-black text-text-main">
-            {initial ? "Edit connection" : "Add Supabase project"}
+            {initial
+              ? "Edit connection"
+              : isFirebase
+                ? "Add Firebase project"
+                : "Add Supabase project"}
           </h4>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-base-200">
             <X className="w-4 h-4" />
@@ -372,38 +418,59 @@ function ConnectionForm({
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder="My Supabase Project"
+            placeholder={isFirebase ? "My Firebase Project" : "My Supabase Project"}
             className="mt-1 w-full px-3 py-2 rounded-xl border border-base-200 bg-base-100 text-sm font-medium"
           />
         </label>
-        <label className="block text-xs font-bold text-text-muted">
-          Project URL
-          <input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://xxxx.supabase.co"
-            className="mt-1 w-full px-3 py-2 rounded-xl border border-base-200 bg-base-100 text-sm font-mono"
-          />
-        </label>
-        <label className="block text-xs font-bold text-text-muted">
-          Service-role key
-          <div className="mt-1 relative">
+        {!isFirebase && (
+          <label className="block text-xs font-bold text-text-muted">
+            Project URL
             <input
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              type={showKey ? "text" : "password"}
-              placeholder="eyJhbGciOi..."
-              className="w-full px-3 py-2 pr-10 rounded-xl border border-base-200 bg-base-100 text-sm font-mono"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://xxxx.supabase.co"
+              className="mt-1 w-full px-3 py-2 rounded-xl border border-base-200 bg-base-100 text-sm font-mono"
             />
-            <button
-              type="button"
-              onClick={() => setShowKey((s) => !s)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-base-200"
-            >
-              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+          </label>
+        )}
+        <label className="block text-xs font-bold text-text-muted">
+          {isFirebase ? "Firebase config (JSON)" : "Service-role key"}
+          <div className="mt-1 relative">
+            {isFirebase ? (
+              <textarea
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                rows={8}
+                placeholder={`{\n  "apiKey": "AIza...",\n  "authDomain": "my-app.firebaseapp.com",\n  "projectId": "my-app",\n  "storageBucket": "my-app.appspot.com",\n  "messagingSenderId": "123",\n  "appId": "1:123:web:abc"\n}`}
+                className="w-full px-3 py-2 rounded-xl border border-base-200 bg-base-100 text-xs font-mono"
+              />
+            ) : (
+              <>
+                <input
+                  value={key}
+                  onChange={(e) => setKey(e.target.value)}
+                  type={showKey ? "text" : "password"}
+                  placeholder="eyJhbGciOi..."
+                  className="w-full px-3 py-2 pr-10 rounded-xl border border-base-200 bg-base-100 text-sm font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey((s) => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-base-200"
+                >
+                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </>
+            )}
           </div>
         </label>
+        {isFirebase && (
+          <p className="text-[11px] text-text-muted">
+            Paste the Firebase web app config object from your Firebase console
+            (Project settings → SDK setup → Config). Access is gated by
+            Firestore security rules.
+          </p>
+        )}
 
         {error && <p className="text-xs text-red-600 font-bold">{error}</p>}
 
@@ -756,7 +823,11 @@ function TransferSection({
 
     const destTest = await testConnection(dest, tables);
     append(`Destination: ${dest.label}`);
-    append(`Key type: ${describeKeyType(destKeyType)}`);
+    append(
+      dest.provider === "firebase"
+        ? `Provider: Firebase (Firestore)`
+        : `Key type: ${describeKeyType(destKeyType)}`,
+    );
 
     if (!destTest.ok) {
       append(`✗ Destination connection failed: ${destTest.error || "Unknown error"}`);
@@ -764,7 +835,7 @@ function TransferSection({
       return;
     }
 
-    if (destKeyType !== "service_role") {
+    if (dest.provider !== "firebase" && destKeyType !== "service_role") {
       append(
         "✗ Destination key is not a service-role key. Use a service-role key to create, replace, or fully sync data.",
       );
@@ -772,7 +843,7 @@ function TransferSection({
       return;
     }
 
-    if (destTest.missingTables.length) {
+    if (dest.provider !== "firebase" && destTest.missingTables.length) {
       append(
         `✗ Destination is missing required tables: ${destTest.missingTables.join(", ")}`,
       );
@@ -810,6 +881,10 @@ function TransferSection({
 
   const bootstrap = async () => {
     if (!dest) return;
+    if (dest.provider === "firebase") {
+      alert("Firestore is schemaless — no schema bootstrap needed.");
+      return;
+    }
     if (getConnectionKeyType(dest) !== "service_role") {
       alert("Destination must use a service-role key.");
       return;

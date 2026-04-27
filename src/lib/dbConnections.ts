@@ -5,12 +5,29 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { supabase as defaultClient } from "@/integrations/supabase/client";
+import {
+  connectFirestore,
+  testFirestore,
+  parseFirebaseConfig,
+  fsSelect,
+  fsInsert,
+  fsUpdate,
+  fsDeleteAll,
+  fsDeleteById,
+  disposeFirestore,
+  FIREBASE_APP_COLLECTIONS,
+  type FirebaseConfig,
+} from "@/lib/firestoreDriver";
+
+export type DbProvider = "supabase" | "firebase";
 
 export type DbConnection = {
   id: string;
   label: string;
   url: string;
   key: string; // service role or anon key (user-supplied)
+  provider?: DbProvider; // defaults to "supabase" for backwards compat
+  firebaseConfig?: FirebaseConfig; // populated for provider==="firebase"
   isDefault?: boolean;
   createdAt?: string;
 };
@@ -33,6 +50,7 @@ const defaultConnection: DbConnection = {
   label: "Lovable Cloud (default)",
   url: DEFAULT_URL,
   key: DEFAULT_KEY,
+  provider: "supabase",
   isDefault: true,
 };
 
@@ -102,6 +120,35 @@ export function addConnection(input: { label: string; url: string; key: string }
     label: input.label.trim() || "External Supabase",
     url: input.url.trim().replace(/\/+$/, ""),
     key: input.key.trim(),
+    provider: "supabase",
+    createdAt: new Date().toISOString(),
+  };
+  const stored = readStored();
+  stored.push(conn);
+  writeStored(stored);
+  window.dispatchEvent(new CustomEvent(DB_EVENTS.CHANGED, { detail: { id } }));
+  return conn;
+}
+
+/**
+ * Add a Firebase/Firestore connection. The "key" field stores the raw
+ * stringified config blob so existing code paths (export/import, edit form)
+ * can keep treating it as opaque text.
+ */
+export function addFirebaseConnection(input: {
+  label: string;
+  config: string | FirebaseConfig;
+}): DbConnection {
+  const cfg =
+    typeof input.config === "string" ? parseFirebaseConfig(input.config) : input.config;
+  const id = `fb-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const conn: DbConnection = {
+    id,
+    label: input.label.trim() || "Firebase project",
+    url: `firestore://${cfg.projectId}`,
+    key: JSON.stringify(cfg),
+    provider: "firebase",
+    firebaseConfig: cfg,
     createdAt: new Date().toISOString(),
   };
   const stored = readStored();
@@ -116,7 +163,19 @@ export function updateConnection(id: string, patch: Partial<Pick<DbConnection, "
   const stored = readStored();
   const idx = stored.findIndex((c) => c.id === id);
   if (idx < 0) return;
-  stored[idx] = { ...stored[idx], ...patch };
+  const merged = { ...stored[idx], ...patch };
+  // If this is a Firebase connection and the key (config blob) changed,
+  // re-parse and refresh the typed config so subsequent calls use it.
+  if (merged.provider === "firebase" && patch.key) {
+    try {
+      merged.firebaseConfig = parseFirebaseConfig(patch.key);
+      merged.url = `firestore://${merged.firebaseConfig.projectId}`;
+    } catch {
+      /* leave as-is; UI will surface the error on test */
+    }
+    disposeFirestore(id);
+  }
+  stored[idx] = merged;
   writeStored(stored);
   clientCache.delete(id);
   window.dispatchEvent(new CustomEvent(DB_EVENTS.CHANGED, { detail: { id } }));
@@ -127,6 +186,7 @@ export function removeConnection(id: string) {
   const stored = readStored().filter((c) => c.id !== id);
   writeStored(stored);
   clientCache.delete(id);
+  disposeFirestore(id);
   if (getActiveId() === id) setActive(DEFAULT_ID);
   window.dispatchEvent(new CustomEvent(DB_EVENTS.CHANGED, { detail: { id } }));
 }
@@ -168,6 +228,9 @@ function buildRestHeaders(conn: DbConnection, accept = "application/json") {
 export async function listConnectionTables(
   conn: DbConnection,
 ): Promise<{ tables: string[]; error?: string }> {
+  if (conn.provider === "firebase") {
+    return { tables: [...FIREBASE_APP_COLLECTIONS] };
+  }
   // Service-role keys are blocked in the browser. Use the edge proxy.
   if (getConnectionKeyType(conn) === "service_role") {
     try {
@@ -209,6 +272,28 @@ export async function testConnection(
   tables: string[];
   missingTables: string[];
 }> {
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || (() => {
+      try { return parseFirebaseConfig(conn.key); } catch { return null; }
+    })();
+    if (!cfg) {
+      return {
+        ok: false,
+        error: "Invalid Firebase config",
+        keyType: "unknown",
+        tables: [],
+        missingTables: expectedTables,
+      };
+    }
+    const r = await testFirestore(conn.id, cfg, expectedTables);
+    return {
+      ok: r.ok,
+      error: r.error,
+      keyType: "service_role", // treat firebase as fully-privileged for transfer flow
+      tables: r.ok ? [...FIREBASE_APP_COLLECTIONS] : [],
+      missingTables: r.missingTables,
+    };
+  }
   const keyType = getConnectionKeyType(conn);
   try {
     const openApi = await listConnectionTables(conn);
@@ -296,6 +381,10 @@ export async function callProxy(payload: {
 // connection, automatically choosing direct JS client (publishable keys) or
 // the proxy (service-role keys).
 export async function connSelect(conn: DbConnection, table: string): Promise<any[]> {
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    return fsSelect(conn.id, cfg, table);
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     const r = await callProxy({ url: conn.url, key: conn.key, op: "select", table, query: "select=*" });
     return Array.isArray(r) ? r : [];
@@ -315,6 +404,13 @@ export async function connSelectQuery(
   table: string,
   query = "select=*",
 ): Promise<any[]> {
+  if (conn.provider === "firebase") {
+    // PostgREST query strings are not honored by Firestore; just return all
+    // rows from the collection. Callers that rely on filters will still get
+    // a usable dataset (caller filters in JS).
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    return fsSelect(conn.id, cfg, table);
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     const r = await callProxy({ url: conn.url, key: conn.key, op: "select", table, query });
     return Array.isArray(r) ? r : [];
@@ -335,6 +431,18 @@ export async function connUpdate(
   filter: string,
   patch: Record<string, any>,
 ): Promise<any[]> {
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    // Translate the simplest PostgREST filter we use everywhere: id=eq.<id>
+    const m = filter.match(/(?:^|&)id=eq\.([^&]+)/);
+    if (!m) {
+      throw new Error(
+        `Firestore connUpdate only supports "id=eq.<id>" filters (got "${filter}")`,
+      );
+    }
+    const updated = await fsUpdate(conn.id, cfg, table, decodeURIComponent(m[1]), patch);
+    return [updated];
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     // Service-role: PATCH via proxy. Add a tiny op via callProxy.update isn't
     // implemented, so we tunnel through the REST endpoint by reusing the
@@ -373,6 +481,10 @@ export async function connInsertReturning(
   rows: any[],
 ): Promise<any[]> {
   if (!rows.length) return [];
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    return fsInsert(conn.id, cfg, table, rows);
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     const r = await callProxy({
       url: conn.url,
@@ -406,6 +518,10 @@ export async function connUpsertReturning(
   onConflict = "id",
 ): Promise<any[]> {
   if (!rows.length) return [];
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    return fsInsert(conn.id, cfg, table, rows, { upsert: true });
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     const r = await callProxy({
       url: conn.url,
@@ -437,6 +553,11 @@ export async function connInsert(
   opts?: { upsert?: boolean; onConflict?: string },
 ): Promise<void> {
   if (!rows.length) return;
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    await fsInsert(conn.id, cfg, table, rows, { upsert: !!opts?.upsert });
+    return;
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     await callProxy({
       url: conn.url,
@@ -457,6 +578,11 @@ export async function connInsert(
 }
 
 export async function connDeleteAll(conn: DbConnection, table: string): Promise<void> {
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    await fsDeleteAll(conn.id, cfg, table);
+    return;
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     await callProxy({ url: conn.url, key: conn.key, op: "delete", table, query: "id=not.is.null" });
     return;
@@ -466,6 +592,11 @@ export async function connDeleteAll(conn: DbConnection, table: string): Promise<
 }
 
 export async function connDeleteById(conn: DbConnection, table: string, id: string): Promise<void> {
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    await fsDeleteById(conn.id, cfg, table, id);
+    return;
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     await callProxy({
       url: conn.url,
