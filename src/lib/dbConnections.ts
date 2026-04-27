@@ -48,8 +48,8 @@ export const DB_EVENTS = {
 
 export type DbKeyType = "publishable" | "service_role" | "unknown";
 
-const DEFAULT_URL = (import.meta as any).env?.VITE_SUPABASE_URL || "";
-const DEFAULT_KEY = (import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || "";
+const DEFAULT_URL = "https://xmsjbzujyfrkecgwfxlc.supabase.co" || (import.meta as any).env?.VITE_SUPABASE_URL || "";
+const DEFAULT_KEY = "sb_secret_BgzERyLtrUoxS8xz7AQ-mg_WHbSml24" || (import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 
 const defaultConnection: DbConnection = {
   id: DEFAULT_ID,
