@@ -20,6 +20,7 @@ import {
   getActiveId,
   setActive,
   addConnection,
+  addFirebaseConnection,
   updateConnection,
   removeConnection,
   testConnection,
@@ -60,6 +61,9 @@ const describeKeyType = (keyType?: DbKeyType) => {
   if (keyType === "publishable") return "publishable key";
   return "unknown key type";
 };
+
+const describeProvider = (conn: DbConnection) =>
+  conn.provider === "firebase" ? "Firebase (Firestore)" : "Supabase (Postgres)";
 
 type Props = {
   refreshData: () => Promise<void> | void;
