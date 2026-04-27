@@ -163,6 +163,13 @@ function ConnectionsSection({
   const [editing, setEditing] = useState<DbConnection | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, ConnectionTestState>>({});
+  // Tiny first-paint skeleton so the section never looks blank/stuck on slow
+  // hardware while React mounts the (potentially long) connection list.
+  const [firstPaint, setFirstPaint] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setFirstPaint(false), 120);
+    return () => clearTimeout(t);
+  }, []);
 
   const handleSwitch = async (id: string) => {
     if (id === activeId) return;
