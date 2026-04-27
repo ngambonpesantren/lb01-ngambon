@@ -29,7 +29,7 @@ import {
   Target, FolderTree, Info, CheckSquare, Square, LogIn, LogOut, Loader2,
   Home, User as UserIcon, LayoutDashboard, MoreHorizontal, ArrowUp, ArrowDown,
   Palette, Save, Image as ImageIcon, TrendingUp, Crown, ZoomIn, ZoomOut,
-  Database, Server
+  Database, Server, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -1330,7 +1330,8 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
               { id: 'appearance', label: 'Appearance', icon: Palette },
               { id: 'statistics', label: 'Statistics', icon: Search },
               { id: 'import-export', label: 'Import / Export', icon: Database },
-              { id: 'backend', label: 'Backend & DB', icon: Server }
+              { id: 'backend', label: 'Backend & DB', icon: Server },
+              { id: 'cache', label: 'Cache Health', icon: ShieldCheck }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -1383,6 +1384,9 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
           )}
           {activeTab === 'backend' && (
             <AdminBackendTab refreshData={refreshData} />
+          )}
+          {activeTab === 'cache' && (
+            <CacheHealthTab />
           )}
         </div>
       </div>
