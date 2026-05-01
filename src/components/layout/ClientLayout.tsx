@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { applyThemeColors } from "@/components/admin/AdminAppearanceTab";
 import { useAuthQuery, useAppDataQuery } from "@/hooks/useAppQueries";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { apiFetch, removeLocalToken } from "@/lib/api";
 import { trackEvent, setAnalyticsAdminFlag } from "@/lib/analytics";
 import { ImageFallback } from "@/components/ImageFallback";
@@ -29,6 +30,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
   const { data: authData, isLoading: isAuthLoading } = useAuthQuery();
   const { data: appData, isLoading: isAppDataLoading } = useAppDataQuery();
+
+  // Auto-refresh queries when DB changes (posts, students, categories, settings, master_goals)
+  useRealtimeSync();
 
   const appSettings = appData?.appSettings || {};
   const isAdmin = !!authData?.authenticated;
