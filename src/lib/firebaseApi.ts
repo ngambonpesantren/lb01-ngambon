@@ -458,9 +458,13 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
       ).catch(() => []);
       return ok(rows);
     }
-    if (path === "/api/events" && method === "POST") { 
-      await connInsertReturning(conn, "app_events", [{ id: "evt-"+Date.now(), ...body }]).catch(()=>[]); 
-      return ok({success: true}); 
+    if (path === "/api/events" && method === "POST") {
+      // Do NOT pass a custom string id — `app_events.id` is uuid with a
+      // gen_random_uuid() default. Strip any client-supplied id to let the
+      // database generate a valid UUID.
+      const { id: _ignored, ...eventBody } = (body ?? {}) as Record<string, unknown>;
+      await connInsertReturning(conn, "app_events", [eventBody]).catch(() => []);
+      return ok({ success: true });
     }
 
     // ===== STATS =====
