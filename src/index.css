@@ -1,0 +1,259 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource/playfair-display/400.css";
+@import "@fontsource/playfair-display/700.css";
+@import "@fontsource/playfair-display/900.css";
+@import "@fontsource/playfair-display/400-italic.css";
+@import "@fontsource/source-serif-4/400.css";
+@import "@fontsource/source-serif-4/600.css";
+@import "@fontsource/source-serif-4/400-italic.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-primary-50: var(--theme-primary-50, #ecfdf5);
+  --color-primary-100: var(--theme-primary-100, #d1fae5);
+  --color-primary-200: var(--theme-primary-200, #a7f3d0);
+  --color-primary-400: var(--theme-primary-400, #34d399);
+  --color-primary-500: var(--theme-primary-500, #10b981);
+  --color-primary-600: var(--theme-primary-600, #059669);
+  --color-primary-700: var(--theme-primary-700, #047857);
+  --color-primary-800: var(--theme-primary-800, #065f46);
+  --color-primary-900: var(--theme-primary-900, #064e3b);
+
+  --color-accent-50: var(--theme-accent-50, #fffbeb);
+  --color-accent-100: var(--theme-accent-100, #fef3c7);
+  --color-accent-500: var(--theme-accent-500, #f59e0b);
+  --color-accent-600: var(--theme-accent-600, #d97706);
+
+  --color-base-50: var(--theme-base-50, #faf8f5);
+  --color-base-100: var(--theme-base-100, #f5f0e6);
+  --color-base-200: var(--theme-base-200, #e7e0d3);
+  --color-base-300: var(--theme-base-300, #d4c7b3);
+  --color-base-800: var(--theme-base-800, #3d3425);
+  --color-base-900: var(--theme-base-900, #30291e);
+
+  --color-text-main: var(--theme-text-main, #30291e);
+  --color-text-muted: var(--theme-text-muted, #615541);
+  --color-text-light: var(--theme-text-light, #a89a83);
+}
+
+
+
+body[data-scroll-locked], html[data-scroll-locked], [data-scroll-locked] {
+  padding-right: 0 !important;
+  margin-right: 0 !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* Custom Modern Scrollbar */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-primary-500) 50%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--color-primary-500) 50%, transparent);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--color-primary-500) 90%, transparent);
+}
+
+/* Sembunyikan scrollbar untuk Chrome, Safari, dan Opera (Webkit) */
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+  opacity: 0;
+}
+
+/* Sembunyikan scrollbar untuk IE, Edge, dan Firefox */
+.no-scrollbar,
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE dan Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* Skeleton shimmer keyframe used by <Skeleton /> and <ImageFallback /> */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@theme inline {
+  --font-heading: 'Playfair Display', 'Source Serif 4', Georgia, serif;
+  --font-serif: 'Source Serif 4', 'Playfair Display', Georgia, serif;
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-sans: 'Geist Variable', sans-serif;
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar: hsl(var(--sidebar));
+  --color-chart-5: hsl(var(--chart-5));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-1: hsl(var(--chart-1));
+  --color-ring: hsl(var(--ring));
+  --color-input: hsl(var(--input));
+  --color-border: hsl(var(--border));
+  --color-destructive: hsl(var(--destructive));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card: hsl(var(--card));
+  --color-foreground: hsl(var(--foreground));
+  --color-background: hsl(var(--background));
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --shadow-soft: var(--neumorphic-shadow);
+  --shadow-inner: var(--neumorphic-inner-shadow);
+  --shadow-primary-glow: 0 8px 30px hsl(var(--primary) / 0.35);
+}
+
+:root {
+  --background: 142 72% 98%;
+  --foreground: 142 30% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 142 30% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 142 30% 10%;
+  --primary: 142 72% 35%;
+  --primary-foreground: 142 30% 98%;
+  --secondary: 142 30% 94%;
+  --secondary-foreground: 142 30% 10%;
+  --muted: 142 20% 96%;
+  --muted-foreground: 142 10% 40%;
+  --accent: 47 95% 50%;
+  --accent-foreground: 142 30% 10%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 142 20% 90%;
+  --input: 142 20% 90%;
+  --ring: 47 95% 45%;
+  --radius: 0.75rem;
+  
+  --sidebar: 142 30% 98%;
+  --sidebar-foreground: 142 30% 10%;
+  --sidebar-primary: 142 72% 35%;
+  --sidebar-primary-foreground: 142 30% 98%;
+  --sidebar-accent: 142 30% 94%;
+  --sidebar-accent-foreground: 142 30% 10%;
+  --sidebar-border: 142 20% 90%;
+  --sidebar-ring: 47 95% 45%;
+  
+  --neumorphic-shadow: 8px 8px 16px rgba(0, 0, 0, 0.05), -8px -8px 16px rgba(255, 255, 255, 0.8);
+  --neumorphic-inner-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.05), inset -4px -4px 8px rgba(255, 255, 255, 0.8);
+}
+
+.dark {
+  --background: 150 100% 4%;
+  --foreground: 84 40% 98%;
+  --card: 155 80% 8%;
+  --card-foreground: 84 40% 98%;
+  --popover: 155 82% 8%;
+  --popover-foreground: 84 40% 98%;
+  --primary: 84 81% 44%;
+  --primary-foreground: 155 100% 5%;
+  --secondary: 155 60% 12%;
+  --secondary-foreground: 84 40% 98%;
+  --muted: 155 40% 15%;
+  --muted-foreground: 150 20% 70%;
+  --accent: 47 100% 55%;
+  --accent-foreground: 155 100% 5%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 155 40% 18%;
+  --input: 155 40% 18%;
+  --ring: 84 81% 44%;
+
+  --chart-1: 84 81% 44%;
+  --chart-2: 47 100% 55%;
+  --chart-3: 150 100% 15%;
+  --chart-4: 142 72% 35%;
+  --chart-5: 60 100% 50%;
+
+  --sidebar: 155 80% 6%;
+  --sidebar-foreground: 84 40% 98%;
+  --sidebar-primary: 84 81% 44%;
+  --sidebar-primary-foreground: 155 100% 5%;
+  --sidebar-accent: 155 50% 12%;
+  --sidebar-accent-foreground: 84 40% 98%;
+  --sidebar-border: 155 40% 18%;
+  --sidebar-ring: 84 81% 44%;
+  
+  --neumorphic-shadow: 8px 8px 16px rgba(0, 0, 0, 0.6), -8px -8px 16px rgba(255, 255, 255, 0.02);
+  --neumorphic-inner-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.6), inset -4px -4px 8px rgba(255, 255, 255, 0.02);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+  
+  *::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+  }
+  
+  body, html {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* ============= Editorial / Newspaper utilities ============= */
+.font-display { font-family: 'Playfair Display', Georgia, serif; font-feature-settings: "lnum", "kern"; }
+.font-serif-body { font-family: 'Source Serif 4', Georgia, serif; }
+
+.editorial-rule {
+  background-image: repeating-linear-gradient(to right, hsl(var(--foreground)) 0 6px, transparent 6px 10px);
+  height: 2px;
+}
+
+.dropcap > p:first-of-type::first-letter {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-weight: 900;
+  font-size: 4.75rem;
+  line-height: 0.85;
+  float: left;
+  padding: 0.35rem 0.75rem 0 0;
+  color: hsl(var(--primary));
+}
+
+@media (min-width: 1024px) {
+  .editorial-columns { column-count: 2; column-gap: 2.5rem; }
+}
