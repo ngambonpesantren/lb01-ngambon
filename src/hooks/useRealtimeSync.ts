@@ -34,8 +34,7 @@ export function useRealtimeSync() {
     const channel = supabase.channel("public-realtime-sync");
 
     tables.forEach((table) => {
-      channel.on(
-        // @ts-expect-error - postgres_changes typing in supabase-js
+      (channel as any).on(
         "postgres_changes",
         { event: "*", schema: "public", table },
         (payload: any) => {
