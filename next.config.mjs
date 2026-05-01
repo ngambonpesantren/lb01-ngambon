@@ -1,4 +1,5 @@
 import withSerwistInit from "@serwist/next";
+import path from "node:path";
 
 const withSerwist = withSerwistInit({
   swSrc: "app/sw.ts",
@@ -10,7 +11,29 @@ const withSerwist = withSerwistInit({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Phase 3: Production hardening
+  output: 'standalone',
+  poweredByHeader: false,
+  compress: true,
+  productionBrowserSourceMaps: false,
+  // Phase 1: Pin workspace root so Next stops warning about additional lockfiles
+  outputFileTracingRoot: path.join(process.cwd()),
+  // Phase 2: Turbopack configuration (replaces legacy webpack() block).
+  // No custom loaders/aliases were defined previously, so this is a clean
+  // baseline that satisfies Next 16's Turbopack validator.
+  turbopack: {
+    root: path.join(process.cwd()),
+    rules: {
+      // Example slot for future loaders, e.g. SVGR:
+      // '*.svg': { loaders: ['@svgr/webpack'], as: '*.js' },
+    },
+    resolveAlias: {
+      '@': './src',
+    },
+  },
   images: {
+    formats: ['image/avif', 'image/webp'],
+    minimumCacheTTL: 60 * 60 * 24 * 7, // 7 days
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },
       { protocol: 'https', hostname: 'firebasestorage.googleapis.com' },
