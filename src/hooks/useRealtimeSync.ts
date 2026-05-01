@@ -14,13 +14,11 @@ import { supabase } from "@/integrations/supabase/client";
 const TABLE_TO_QUERY_KEYS: Record<string, string[][]> = {
   posts: [
     ["public-posts"],
-    ["post"],
-    ["posts-by-category"],
-    ["categories-with-posts"],
+    ["public-post"],
     ["app-data"],
   ],
-  students: [["students"], ["app-data"]],
-  categories: [["categories-with-posts"], ["app-data"]],
+  students: [["public-students"], ["app-data"]],
+  categories: [["app-data"]],
   master_goals: [["app-data"]],
   settings: [["app-data"]],
 };
