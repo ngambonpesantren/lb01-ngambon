@@ -480,18 +480,19 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
       if (method === "GET") {
         let rows = [];
         try { rows = await connSelectQuery(conn, "posts", "select=*&order=created_at.desc") || []; }catch(e){}
-        return ok(rows);
+        return ok((rows as any[]).map(normalizePostRow));
       }
       if (method === "POST") {
         const input = {
-          id: Date.now().toString(),
           ...body,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
+        // Remove client-side id to let DB generate UUID
+        delete (input as any).id;
         const rows = await connInsertReturning(conn, "posts", [input]);
         logAction("Artikel Dibuat", `Admin membuat artikel baru: ${input.title}`, "system");
-        return ok(rows?.[0] || input);
+        return ok(normalizePostRow(rows?.[0] || input));
       }
     }
     const postMatch = path.match(/^\/api\/posts\/([^/]+)$/);
@@ -501,7 +502,7 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
         const input = { ...body, updated_at: new Date().toISOString() };
         const rows = await connUpdate(conn, "posts", `id=eq.${id}`, input);
         logAction("Artikel Diperbarui", `Admin memperbarui artikel: ${input.title || id}`, "system");
-        return ok(rows?.[0] || { id, ...input });
+        return ok(normalizePostRow(rows?.[0] || { id, ...input }));
       }
       if (method === "DELETE") {
         await connDeleteById(conn, "posts", id);
