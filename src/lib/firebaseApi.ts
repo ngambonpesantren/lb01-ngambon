@@ -48,6 +48,20 @@ function normalizePostRow(r: any): any {
   };
 }
 
+// Normalize incoming post body for DB write (featured_image → also set cover_image, etc.)
+function normalizePostWrite(body: any): any {
+  const out = { ...body };
+  // Map featured_image → cover_image for DB compatibility
+  if (out.featured_image !== undefined) {
+    out.cover_image = out.featured_image;
+  }
+  // Map author_id → author for DB compatibility
+  if (out.author_id !== undefined) {
+    out.author = out.author_id;
+  }
+  return out;
+}
+
 // Run an array of async tasks with a hard concurrency cap. Used to throttle
 // bulk operations (rank snapshots, bulk imports) that would otherwise fire
 // hundreds of parallel writes and exhaust connection pools / hit rate limits
@@ -495,11 +509,11 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
         return ok((rows as any[]).map(normalizePostRow));
       }
       if (method === "POST") {
-        const input = {
+        const input = normalizePostWrite({
           ...body,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        };
+        });
         // Remove client-side id to let DB generate UUID
         delete (input as any).id;
         const rows = await connInsertReturning(conn, "posts", [input]);
@@ -511,7 +525,7 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
     if (postMatch) {
       const id = postMatch[1];
       if (method === "PUT") {
-        const input = { ...body, updated_at: new Date().toISOString() };
+        const input = normalizePostWrite({ ...body, updated_at: new Date().toISOString() });
         const rows = await connUpdate(conn, "posts", `id=eq.${id}`, input);
         logAction("Artikel Diperbarui", `Admin memperbarui artikel: ${input.title || id}`, "system");
         return ok(normalizePostRow(rows?.[0] || { id, ...input }));
