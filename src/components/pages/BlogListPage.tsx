@@ -4,7 +4,7 @@ import { apiFetch } from '../../lib/api';
 import type { Post } from '../../lib/types';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, Clock, ChevronRight, LayoutGrid } from 'lucide-react';
+import { ArrowLeft, Clock, ChevronRight, LayoutGrid, TrendingUp, Flame } from 'lucide-react';
 import { slugifyCategory } from '../../lib/categorySlug';
 
 function formatDate(d?: string | null) {
@@ -26,9 +26,24 @@ export function BlogListPage() {
     }
   });
 
-  const [lead, ...rest] = posts;
-  const secondary = rest.slice(0, 2);
-  const tail = rest.slice(2);
+  // Featured: latest 3
+  const featured = posts.slice(0, 3);
+  const [lead, ...secondaryFeatured] = featured;
+
+  // Popular: sorted by views (or fallback newest)
+  const popular = [...posts].sort((a, b) => ((b as any).views || 0) - ((a as any).views || 0)).slice(0, 6);
+
+  // Group by category
+  const categoryMap = new Map<string, Post[]>();
+  posts.forEach(p => {
+    const cat = p.category || 'Umum';
+    if (!categoryMap.has(cat)) categoryMap.set(cat, []);
+    categoryMap.get(cat)!.push(p);
+  });
+
+  // Remaining posts (excluding featured)
+  const featuredIds = new Set(featured.map(p => p.id));
+  const tail = posts.filter(p => !featuredIds.has(p.id));
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -74,8 +89,8 @@ export function BlogListPage() {
           </div>
         ) : (
           <>
-            {/* Lead story + secondary */}
-            <section className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-10 pb-12 mb-12 border-b border-border">
+            {/* Featured / Lead story + secondary */}
+            <section className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-10 pb-12 mb-12 border-b border-border" id="featured">
               {lead && (
                 <article className="lg:col-span-2 group">
                   <Link href={`/blog/${lead.slug || lead.id}`} className="block">
@@ -110,7 +125,7 @@ export function BlogListPage() {
               )}
 
               <div className="lg:col-span-1 lg:border-l lg:border-border lg:pl-8 space-y-8 divide-y divide-border">
-                {secondary.map((post, idx) => (
+                {secondaryFeatured.map((post, idx) => (
                   <article key={post.id} className={`group ${idx > 0 ? 'pt-8' : ''}`}>
                     <Link href={`/blog/${post.slug || post.id}`} className="block">
                       {post.featured_image && (
@@ -141,7 +156,73 @@ export function BlogListPage() {
               </div>
             </section>
 
-            {/* Editorial grid – the rest */}
+            {/* Popular Posts */}
+            {popular.length > 0 && (
+              <>
+                <div className="flex items-center gap-4 text-xs uppercase tracking-[0.25em] font-bold text-muted-foreground mb-8">
+                  <span className="text-foreground inline-flex items-center gap-2"><Flame className="w-3.5 h-3.5 text-primary" /> Populer</span>
+                  <span className="flex-1 editorial-rule" />
+                </div>
+                <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-10 pb-12 mb-12 border-b border-border">
+                  {popular.map((post) => (
+                    <article key={post.id} className="group">
+                      <Link href={`/blog/${post.slug || post.id}`} className="block">
+                        {post.featured_image ? (
+                          <div className="relative w-full aspect-[4/3] overflow-hidden mb-4 bg-muted">
+                            <Image src={post.featured_image} alt={post.title} fill referrerPolicy="no-referrer" className="object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
+                          </div>
+                        ) : (
+                          <div className="w-full aspect-[4/3] bg-foreground/[0.03] flex items-center justify-center mb-4">
+                            <span className="font-display text-foreground/10 text-4xl font-black">PPMH</span>
+                          </div>
+                        )}
+                        {post.category && (
+                          <span className="inline-block text-[10px] uppercase tracking-[0.3em] font-bold text-primary mb-2">{post.category}</span>
+                        )}
+                        <h3 className="font-display text-xl font-bold text-foreground leading-tight group-hover:text-primary transition-colors line-clamp-2">{post.title}</h3>
+                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                          <time className="text-[11px] uppercase tracking-widest text-muted-foreground font-semibold">{formatDate(post.published_at)}</time>
+                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><TrendingUp className="w-3 h-3" /> {(post as any).views || 0}</span>
+                        </div>
+                      </Link>
+                    </article>
+                  ))}
+                </section>
+              </>
+            )}
+
+            {/* By Category */}
+            {Array.from(categoryMap.entries()).map(([catName, catPosts]) => (
+              <section key={catName} className="mb-12">
+                <div className="flex items-center gap-4 text-xs uppercase tracking-[0.25em] font-bold text-muted-foreground mb-8">
+                  <span className="text-foreground">{catName}</span>
+                  <span className="flex-1 editorial-rule" />
+                  <Link href={`/berita/kategori/${slugifyCategory(catName)}`} className="text-primary hover:underline text-[11px]">Lihat Semua</Link>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-10">
+                  {catPosts.slice(0, 3).map((post) => (
+                    <article key={post.id} className="group">
+                      <Link href={`/blog/${post.slug || post.id}`} className="block">
+                        {post.featured_image ? (
+                          <div className="relative w-full aspect-[4/3] overflow-hidden mb-4 bg-muted">
+                            <Image src={post.featured_image} alt={post.title} fill referrerPolicy="no-referrer" className="object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
+                          </div>
+                        ) : (
+                          <div className="w-full aspect-[4/3] bg-foreground/[0.03] flex items-center justify-center mb-4">
+                            <span className="font-display text-foreground/10 text-4xl font-black">PPMH</span>
+                          </div>
+                        )}
+                        <h3 className="font-display text-xl font-bold text-foreground leading-tight group-hover:text-primary transition-colors line-clamp-2">{post.title}</h3>
+                        <p className="font-serif-body text-sm text-foreground/70 mt-2 leading-relaxed line-clamp-2">{post.excerpt}</p>
+                        <time className="block text-[11px] uppercase tracking-widest text-muted-foreground font-semibold mt-3">{formatDate(post.published_at)}</time>
+                      </Link>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ))}
+
+            {/* All remaining posts */}
             {tail.length > 0 && (
               <>
                 <div className="flex items-center gap-4 text-xs uppercase tracking-[0.25em] font-bold text-muted-foreground mb-8">
