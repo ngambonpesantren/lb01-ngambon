@@ -509,11 +509,11 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
         return ok((rows as any[]).map(normalizePostRow));
       }
       if (method === "POST") {
-        const input = {
+        const input = normalizePostWrite({
           ...body,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        };
+        });
         // Remove client-side id to let DB generate UUID
         delete (input as any).id;
         const rows = await connInsertReturning(conn, "posts", [input]);
@@ -525,7 +525,7 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
     if (postMatch) {
       const id = postMatch[1];
       if (method === "PUT") {
-        const input = { ...body, updated_at: new Date().toISOString() };
+        const input = normalizePostWrite({ ...body, updated_at: new Date().toISOString() });
         const rows = await connUpdate(conn, "posts", `id=eq.${id}`, input);
         logAction("Artikel Diperbarui", `Admin memperbarui artikel: ${input.title || id}`, "system");
         return ok(normalizePostRow(rows?.[0] || { id, ...input }));
