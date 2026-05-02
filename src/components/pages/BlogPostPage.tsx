@@ -6,7 +6,7 @@ import { apiFetch } from '../../lib/api';
 import type { Post } from '../../lib/types';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, CalendarDays, Clock } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Clock, User } from 'lucide-react';
 
 function formatDate(d?: string | null) {
   return d ? new Date(d).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }) : '-';
@@ -96,6 +96,15 @@ export function BlogPostPage({ slug }: { slug: string }) {
 
             {/* Byline */}
             <div className="flex items-center justify-center gap-6 text-xs uppercase tracking-widest text-muted-foreground font-semibold border-y border-border py-4 mb-10">
+              {(post.author_id || (post as any).author) && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <User className="w-3.5 h-3.5" />
+                    <span>{(post as any).author || post.author_id}</span>
+                  </div>
+                  <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
+                </>
+              )}
               <div className="flex items-center gap-2">
                 <CalendarDays className="w-3.5 h-3.5" />
                 <time dateTime={post.published_at || ''}>{formatDate(post.published_at)}</time>

@@ -6,21 +6,32 @@ import { apiFetch } from '../../lib/api';
 import type { Post, Student } from '../../lib/types';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowRight, Trophy, BookOpen, Clock, Activity, Users } from 'lucide-react';
+import { ArrowRight, Trophy, BookOpen, Clock, Activity, Users, Star } from 'lucide-react';
 import { motion } from 'motion/react';
+import { slugifyCategory } from '../../lib/categorySlug';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid
 } from 'recharts';
 
 export function LandingPage() {
-  const { data: posts = [] } = useQuery<Post[]>({
+  const { data: allPosts = [] } = useQuery<Post[]>({
     queryKey: ['public-posts'],
     queryFn: async () => {
       const res = await apiFetch('/api/posts');
       if (!res.ok) throw new Error('Failed to fetch posts');
       const all: Post[] = await res.json();
-      return all.filter(p => p.status === 'published').slice(0, 3);
+      return all.filter(p => p.status === 'published');
     }
+  });
+
+  const featuredPosts = allPosts.slice(0, 3);
+
+  // Group by category for the landing page
+  const categoryMap = new Map<string, Post[]>();
+  allPosts.forEach(p => {
+    const cat = p.category || 'Umum';
+    if (!categoryMap.has(cat)) categoryMap.set(cat, []);
+    categoryMap.get(cat)!.push(p);
   });
 
   const { data: students = [] } = useQuery<Student[]>({
@@ -181,10 +192,12 @@ export function LandingPage() {
       >
         <div className="flex items-end justify-between gap-4 mb-10">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.4em] text-muted-foreground mb-3 inline-flex items-center gap-2">
+            <p className="text-[11px] uppercase tracking-[0.4em] text-muted-foreground mb-3 inline-flex items-center gap-2 antialiased">
               <BookOpen className="w-3 h-3" /> Sekilas PPMH
             </p>
-            <h2 className="font-display text-4xl md:text-5xl font-black text-foreground tracking-tight">Berita & Insight</h2>
+            <h2 className="font-display text-4xl md:text-5xl font-black text-foreground tracking-tight text-balance">
+              <Star className="w-6 h-6 text-primary inline mr-2" />Berita Unggulan
+            </h2>
           </div>
           <Link href="/blog" className="inline-flex items-center text-foreground font-bold hover:text-primary transition-colors uppercase tracking-widest text-xs border-b border-foreground hover:border-primary pb-1">
             Semua Artikel <ArrowRight className="w-3.5 h-3.5 ml-1" />
@@ -194,7 +207,7 @@ export function LandingPage() {
         <div className="editorial-rule mb-10" />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-12">
-          {posts.map((post) => (
+          {featuredPosts.map((post) => (
             <motion.div
               key={post.id}
               variants={{
@@ -230,7 +243,7 @@ export function LandingPage() {
               </Link>
             </motion.div>
           ))}
-          {posts.length === 0 && (
+          {featuredPosts.length === 0 && (
             <div className="col-span-3 text-center py-20 border border-dashed border-border">
               <BookOpen className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
               <p className="text-muted-foreground font-serif-body italic">Belum ada artikel yang diterbitkan.</p>
@@ -238,6 +251,38 @@ export function LandingPage() {
           )}
         </div>
       </motion.section>
+
+      {/* Category Sections */}
+      {Array.from(categoryMap.entries()).slice(0, 4).map(([catName, catPosts]) => (
+        <section key={catName} className="max-w-6xl mx-auto px-4 md:px-8 pb-12">
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <h3 className="font-display text-2xl md:text-3xl font-bold text-foreground">{catName}</h3>
+            <Link href={`/berita/kategori/${slugifyCategory(catName)}`} className="text-primary text-xs font-bold uppercase tracking-widest hover:underline inline-flex items-center">
+              Lihat Semua <ArrowRight className="w-3 h-3 ml-1" />
+            </Link>
+          </div>
+          <div className="editorial-rule mb-6" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-8">
+            {catPosts.slice(0, 3).map((post) => (
+              <Link key={post.id} href={`/blog/${post.slug || post.id}`} className="group block">
+                {post.featured_image ? (
+                  <div className="relative w-full aspect-[4/3] overflow-hidden mb-3 bg-muted">
+                    <Image src={post.featured_image} alt={post.title} fill referrerPolicy="no-referrer" className="object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
+                  </div>
+                ) : (
+                  <div className="w-full aspect-[4/3] bg-foreground/[0.03] flex items-center justify-center mb-3">
+                    <BookOpen className="w-8 h-8 text-foreground/10" />
+                  </div>
+                )}
+                <h4 className="font-display text-lg font-bold text-foreground leading-tight group-hover:text-primary transition-colors line-clamp-2">{post.title}</h4>
+                <time className="block text-[11px] uppercase tracking-widest text-muted-foreground font-semibold mt-2">
+                  {post.published_at ? new Date(post.published_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}
+                </time>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }
