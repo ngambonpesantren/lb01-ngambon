@@ -15,6 +15,7 @@ const TABLE_TO_QUERY_KEYS: Record<string, string[][]> = {
   posts: [
     ["public-posts"],
     ["public-post"],
+    ["posts"],
     ["app-data"],
   ],
   students: [["public-students"], ["app-data"]],
