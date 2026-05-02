@@ -36,6 +36,18 @@ const fail = (status: number, message: string): Response =>
     headers: { "Content-Type": "application/json" },
   });
 
+// Normalize DB row (cover_image, author) → Post type (featured_image, author_id)
+function normalizePostRow(r: any): any {
+  if (!r) return r;
+  return {
+    ...r,
+    featured_image: r.featured_image || r.cover_image || '',
+    author_id: r.author_id || r.author || '',
+    cover_image: undefined,
+    author: r.author || r.author_id || '',
+  };
+}
+
 // Run an array of async tasks with a hard concurrency cap. Used to throttle
 // bulk operations (rank snapshots, bulk imports) that would otherwise fire
 // hundreds of parallel writes and exhaust connection pools / hit rate limits
