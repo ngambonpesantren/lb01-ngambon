@@ -5,40 +5,12 @@ import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
-import { Bold, Italic, Strikethrough, Heading1, Heading2, List, ListOrdered, Quote, Undo, Redo, Link as LinkIcon, ImageIcon, X, Upload } from 'lucide-react';
+import { Bold, Italic, Strikethrough, Heading1, Heading2, List, ListOrdered, Quote, Undo, Redo, Link as LinkIcon, ImageIcon, X, Upload, ChevronDown, LayoutGrid, Table as TableIcon, GalleryHorizontal, MessageSquareQuote } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useEffect, useState } from 'react';
-
-// Stub for storage service - In production, this would upload to Firebase Storage
-async function uploadFileToStorage(file: File): Promise<string> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new globalThis.Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-        const MAX_WIDTH = 1200;
-        if (width > MAX_WIDTH) {
-          height = Math.round((height * MAX_WIDTH) / width);
-          width = MAX_WIDTH;
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/webp', 0.8));
-        } else {
-          resolve(event.target?.result as string);
-        }
-      };
-      if (event.target?.result) img.src = event.target.result as string;
-    };
-    reader.readAsDataURL(file);
-  });
-}
+import { AccordionBlock, TabsBlock, SimpleTableBlock, ImageCarouselBlock, QuoteCarouselBlock } from './editor/blockNodes';
+import { batchUploadImages } from '@/lib/uploadImage';
+import { toast } from 'sonner';
 
 // Custom Extension to center image
 const CenteredImage = Image.extend({
@@ -63,17 +35,28 @@ export function TiptapEditor({ content, onChange }: { content: string, onChange:
       StarterKit,
       CenteredImage,
       Link.configure({ openOnClick: false }),
-      Placeholder.configure({ placeholder: 'Tulis ceritamu di sini...' })
+      Placeholder.configure({ placeholder: 'Tulis ceritamu di sini...' }),
+      AccordionBlock,
+      TabsBlock,
+      SimpleTableBlock,
+      ImageCarouselBlock,
+      QuoteCarouselBlock,
     ],
     content,
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());
       // Auto-save to localStorage
-      localStorage.setItem('ppmh_insight_draft', editor.getHTML());
+      try {
+        localStorage.setItem('ppmh_insight_draft', editor.getHTML());
+      } catch (e: any) {
+        if (e.name === 'QuotaExceededError') {
+          console.warn('Local storage quota exceeded, cannot save draft locally.');
+        }
+      }
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose-base dark:prose-invert max-w-none focus:outline-none min-h-[300px] p-4 bg-base-50 rounded-b-xl border-x border-b border-border'
+        class: 'prose prose-sm sm:prose-base dark:prose-invert max-w-none focus:outline-none min-h-[300px] p-4 bg-background text-foreground rounded-b-xl border-x border-b border-border'
       }
     }
   });
@@ -95,21 +78,28 @@ export function TiptapEditor({ content, onChange }: { content: string, onChange:
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
       setIsUploading(true);
+      const tid = toast.loading('Memulai upload...');
       try {
-        const url = await uploadFileToStorage(file);
-        setImageUrl(url);
+        const urls = await batchUploadImages(files, 'post_images', tid);
+        urls.forEach((url) => {
+          editor.chain().focus().setImage({ src: url }).run();
+        });
+        setShowMediaManager(false);
+      } catch (err) {
+        console.error(err);
       } finally {
         setIsUploading(false);
+        e.target.value = '';
       }
     }
   };
 
   const MenuBar = () => {
     return (
-      <div className="flex flex-wrap items-center gap-1 p-2 bg-base-100 border border-border rounded-t-xl border-b-0 relative">
+      <div className="flex flex-wrap items-center gap-1 p-2 bg-muted/60 border border-border rounded-t-xl border-b-0 relative">
         <Button variant="ghost" size="icon" onClick={() => editor.chain().focus().toggleBold().run()} className={editor.isActive('bold') ? 'bg-secondary' : ''}><Bold className="w-4 h-4" /></Button>
         <Button variant="ghost" size="icon" onClick={() => editor.chain().focus().toggleItalic().run()} className={editor.isActive('italic') ? 'bg-secondary' : ''}><Italic className="w-4 h-4" /></Button>
         <Button variant="ghost" size="icon" onClick={() => editor.chain().focus().toggleStrike().run()} className={editor.isActive('strike') ? 'bg-secondary' : ''}><Strikethrough className="w-4 h-4" /></Button>
@@ -136,7 +126,29 @@ export function TiptapEditor({ content, onChange }: { content: string, onChange:
         >
           <ImageIcon className="w-4 h-4" />
         </Button>
-        
+
+        <div className="w-[1px] h-6 bg-border mx-1" />
+        <Button variant="ghost" size="icon" title="Sisipkan Accordion"
+          onClick={() => editor.chain().focus().insertContent({ type: 'accordionBlock' }).run()}>
+          <ChevronDown className="w-4 h-4" />
+        </Button>
+        <Button variant="ghost" size="icon" title="Sisipkan Tabs"
+          onClick={() => editor.chain().focus().insertContent({ type: 'tabsBlock' }).run()}>
+          <LayoutGrid className="w-4 h-4" />
+        </Button>
+        <Button variant="ghost" size="icon" title="Sisipkan Tabel"
+          onClick={() => editor.chain().focus().insertContent({ type: 'simpleTableBlock' }).run()}>
+          <TableIcon className="w-4 h-4" />
+        </Button>
+        <Button variant="ghost" size="icon" title="Sisipkan Carousel Gambar"
+          onClick={() => editor.chain().focus().insertContent({ type: 'imageCarouselBlock' }).run()}>
+          <GalleryHorizontal className="w-4 h-4" />
+        </Button>
+        <Button variant="ghost" size="icon" title="Sisipkan Carousel Kutipan"
+          onClick={() => editor.chain().focus().insertContent({ type: 'quoteCarouselBlock' }).run()}>
+          <MessageSquareQuote className="w-4 h-4" />
+        </Button>
+
         <div className="flex-1" />
         <Button variant="ghost" size="icon" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()}><Undo className="w-4 h-4" /></Button>
         <Button variant="ghost" size="icon" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()}><Redo className="w-4 h-4" /></Button>
@@ -161,7 +173,7 @@ export function TiptapEditor({ content, onChange }: { content: string, onChange:
               placeholder="Paste Image URL here..." 
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
-              className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring focus:ring-primary/50"
+              className="w-full bg-background text-foreground placeholder:text-muted-foreground border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
@@ -173,7 +185,7 @@ export function TiptapEditor({ content, onChange }: { content: string, onChange:
             </div>
             <label className="flex items-center justify-center gap-2 w-full bg-secondary text-secondary-foreground hover:bg-secondary/80 px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer transition-colors cursor-pointer border border-border border-dashed relative">
               {isUploading ? 'Uploading...' : <><Upload className="w-4 h-4"/> Pilih File Local</>}
-              <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
+              <input type="file" multiple accept="image/*" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
             </label>
           </div>
           <Button onClick={handleApplyMedia} disabled={!imageUrl || isUploading} className="w-full rounded-xl mt-1">

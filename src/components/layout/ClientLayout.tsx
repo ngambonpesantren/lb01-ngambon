@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
-import { applyThemeColors } from "@/components/admin/AdminAppearanceTab";
+import { applyThemeColors, PRESETS } from "@/components/admin/AdminAppearanceTab";
 import { useAuthQuery, useAppDataQuery } from "@/hooks/useAppQueries";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { apiFetch, removeLocalToken } from "@/lib/api";
@@ -13,7 +13,7 @@ import { ImageFallback } from "@/components/ImageFallback";
 import { FloatingActionContainer } from "@/components/ui/FloatingActionContainer";
 import { ScrollToTop } from "@/components/ui/ScrollToTop";
 import { PwaDownloadPrompt } from "@/components/ui/PwaDownloadPrompt";
-import { Trophy, Settings, LogOut, LogIn, Loader2, Home, LayoutDashboard, Sun, Moon } from "lucide-react";
+import { Trophy, Settings, LogOut, LogIn, Loader2, Home, LayoutDashboard, Sun, Moon, Palette } from "lucide-react";
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -38,11 +38,30 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const isAdmin = !!authData?.authenticated;
   const isLoading = isAppDataLoading && !appData;
 
+  // Local override for preset (cycle button). Falls back to server appSettings.
+  const [presetOverride, setPresetOverride] = useState<string | null>(null);
+
   useEffect(() => {
-    if (appSettings && Object.keys(appSettings).length > 0) {
-      applyThemeColors(appSettings);
-    }
-  }, [appSettings]);
+    const saved = typeof window !== "undefined" ? localStorage.getItem("theme-preset") : null;
+    if (saved && PRESETS[saved]) setPresetOverride(saved);
+  }, []);
+
+  useEffect(() => {
+    const merged = { ...appSettings, ...(presetOverride ? { activePresetId: presetOverride } : {}) };
+    if (Object.keys(merged).length > 0) applyThemeColors(merged);
+  }, [appSettings, presetOverride]);
+
+  const cyclePreset = useCallback(() => {
+    const keys = Object.keys(PRESETS);
+    const current = presetOverride || appSettings.activePresetId || keys[0];
+    const idx = keys.indexOf(current);
+    const next = keys[(idx + 1) % keys.length];
+    setPresetOverride(next);
+    localStorage.setItem("theme-preset", next);
+  }, [presetOverride, appSettings.activePresetId]);
+
+  const activePresetName =
+    PRESETS[presetOverride || appSettings.activePresetId || "fresh_majestic"]?.name || "Theme";
 
   const [themeMode, setThemeMode] = useState<"light" | "dark">("dark");
 
@@ -140,8 +159,19 @@ function AppContent({ children }: { children: React.ReactNode }) {
               <button onClick={toggleTheme} className="p-2 text-muted-foreground hover:text-foreground transition-colors hover:bg-secondary rounded-xl">
                 {themeMode === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
+              <button
+                onClick={cyclePreset}
+                title={`Theme preset: ${activePresetName} (klik untuk ganti)`}
+                aria-label="Cycle theme preset"
+                className="p-2 text-muted-foreground hover:text-foreground transition-colors hover:bg-secondary rounded-xl"
+              >
+                <Palette className="w-5 h-5" />
+              </button>
               <button onClick={() => router.push("/")} className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${pathname === "/" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary"}`}>
                 Beranda
+              </button>
+              <button onClick={() => router.push("/blog")} className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${(pathname || "").startsWith("/blog") || (pathname || "").startsWith("/berita") ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary"}`}>
+                Berita
               </button>
               <button onClick={() => router.push("/leaderboard")} className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${pathname === "/leaderboard" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary"}`}>
                 Leaderboard
@@ -166,14 +196,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
                   </button>
                 </>
               ) : (
-                <>
-                  <button onClick={() => router.push("/blog")} className="px-4 py-2 rounded-xl text-sm font-semibold text-secondary-700 hover:bg-secondary/10 border border-secondary/20 transition-all mr-2">
-                    Artikel & Berita
-                  </button>
-                  <button onClick={() => router.push("/login")} className="px-4 py-2 rounded-xl text-sm font-semibold text-primary hover:bg-primary/10 border border-primary/20 transition-all">
-                    Admin Login
-                  </button>
-                </>
+                <button onClick={() => router.push("/login")} className="px-4 py-2 rounded-xl text-sm font-semibold text-primary hover:bg-primary/10 border border-primary/20 transition-all">
+                  Admin Login
+                </button>
               )}
             </div>
           </div>

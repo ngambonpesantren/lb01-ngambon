@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { Image as ImageIcon, Save, Trash2, Edit2, Info, Loader2, Link as LinkIcon, Download, X, Search, Filter, ArrowUpAZ, ArrowDownAZ, TrendingUp, Plus, CheckSquare, Square, CheckCircle2, ArrowLeft, ZoomOut, ZoomIn, MoreHorizontal } from 'lucide-react';
-import Cropper from 'react-easy-crop';
+import { ImageUploader } from '../ui/ImageUploader';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiFetch } from '../../lib/api';
 import { useUpdateStudentMutation } from '../../hooks/useAppQueries';
@@ -287,54 +287,6 @@ function StudentAdminModal({ student, masterGoals, categories, onClose, onSave }
 
   const [filterCat, setFilterCat] = useState('ALL');
   const [tagInput, setTagInput] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // --- CROPPING STATE ---
-  const [cropImage, setCropImage] = useState<string | null>(null);
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setCropImage(event.target?.result as string);
-      setCrop({ x: 0, y: 0 });
-      setZoom(1);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const onCropComplete = useCallback((_croppedArea: any, croppedAreaPixels: any) => {
-    setCroppedAreaPixels(croppedAreaPixels);
-  }, []);
-
-  const confirmCrop = () => {
-    if (!cropImage || !croppedAreaPixels) return;
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement('canvas');
-      const MAX_SIZE = 512;
-      canvas.width = MAX_SIZE;
-      canvas.height = MAX_SIZE;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(
-          image,
-          croppedAreaPixels.x, croppedAreaPixels.y, croppedAreaPixels.width, croppedAreaPixels.height,
-          0, 0, MAX_SIZE, MAX_SIZE
-        );
-        const compressedDataUrl = canvas.toDataURL('image/webp', 0.8);
-        setFormData(prev => ({ ...prev, photo: compressedDataUrl }));
-        setCropImage(null);
-      }
-    };
-    image.src = cropImage;
-  };
 
   const addTag = () => {
     if (tagInput.trim() !== '' && !formData.tags?.includes(tagInput.trim())) {
@@ -349,7 +301,7 @@ function StudentAdminModal({ student, masterGoals, categories, onClose, onSave }
 
   const displayedMasterGoals = filterCat === 'ALL' 
     ? masterGoals 
-    : masterGoals.filter((mg: any) => mg.categoryId === filterCat);
+    : masterGoals.filter((mg: any) => (mg.categoryName || '').toLowerCase() === String(filterCat).toLowerCase());
 
   const isAssigned = (goalId: string) => formData.assignedGoals.some(ag => ag.goalId === goalId);
   const isCompleted = (goalId: string) => formData.assignedGoals.find(ag => ag.goalId === goalId)?.completed || false;
@@ -377,9 +329,7 @@ function StudentAdminModal({ student, masterGoals, categories, onClose, onSave }
   const visibleCompletedCount = visibleGoalIds.filter(id => isCompleted(id)).length;
   const allVisibleAssigned = visibleGoalIds.length > 0 && visibleAssignedCount === visibleGoalIds.length;
   const allVisibleCompleted = visibleAssignedCount > 0 && visibleCompletedCount === visibleAssignedCount;
-  const scopeLabel = filterCat === 'ALL'
-    ? 'all tracks'
-    : (categories.find((c: any) => c.id === filterCat)?.name || 'this track');
+  const scopeLabel = filterCat === 'ALL' ? 'all tracks' : filterCat;
 
   const bulkSetAssigned = (assign: boolean) => {
     setFormData(prev => {
@@ -442,17 +392,26 @@ function StudentAdminModal({ student, masterGoals, categories, onClose, onSave }
           {/* Biodata */}
           <div className="w-full lg:w-80 space-y-6">
             <div className="text-center">
-               <div className="relative inline-block group">
+              <div className="relative inline-block group">
                 <Avatar src={formData.photo} alt="Avatar" className="w-32 h-32 rounded-xl border-4 border-card bg-secondary shadow-md object-cover" wrapperClassName="w-32 h-32" />
-                <button type="button" onClick={() => fileInputRef.current?.click()} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-foreground/60 p-3 rounded-full text-background opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm shadow-soft" title="Unggah Foto">
-                  <ImageIcon className="w-6 h-6" />
-                </button>
-                <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
-                <button type="button" onClick={() => setFormData(p => ({...p, photo: `https://api.dicebear.com/7.x/avataaars/svg?seed=${Math.floor(Math.random()*1000)}&backgroundColor=d1d4f9`}))} className="absolute -bottom-2 -right-2 bg-primary p-2 rounded-xl text-primary-foreground shadow-soft active:scale-90 transition-transform">
-                  <ArrowLeft className="w-4 h-4 rotate-180" />
-                </button>
+                <ImageUploader 
+                  folder="avatars"
+                  aspectRatio={1}
+                  onUploadSuccess={(url) => setFormData(prev => ({ ...prev, photo: url }))}
+                  trigger={
+                    <button type="button" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-foreground/60 p-3 rounded-full text-background opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm shadow-soft" title="Unggah Foto">
+                      <ImageIcon className="w-6 h-6" />
+                    </button>
+                  }
+                  className="absolute inset-0 z-10"
+                />
+                <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 flex items-center justify-center gap-2 w-max">
+                  <button type="button" onClick={() => setFormData(p => ({...p, photo: `https://api.dicebear.com/7.x/bottts/svg?seed=${Math.floor(Math.random()*1000)}&backgroundColor=d1d4f9`}))} className="bg-primary/10 text-primary px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all">Robot</button>
+                  <button type="button" onClick={() => setFormData(p => ({...p, photo: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || 'S')}&background=random`}))} className="bg-primary/10 text-primary px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all">Inisial</button>
+                  <button type="button" onClick={() => setFormData(p => ({...p, photo: `https://api.dicebear.com/7.x/shapes/svg?seed=${Math.floor(Math.random()*1000)}&backgroundColor=random`}))} className="bg-primary/10 text-primary px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all">Bentuk</button>
+                </div>
               </div>
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mt-3">Profile Identity</p>
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mt-12">Profile Identity</p>
             </div>
             
             <div className="space-y-4">
@@ -498,7 +457,7 @@ function StudentAdminModal({ student, masterGoals, categories, onClose, onSave }
               </div>
               <select className="bg-secondary border-none rounded-xl p-2 text-xs font-bold text-foreground focus:ring-2 focus:ring-primary/50" value={filterCat} onChange={e => setFilterCat(e.target.value)}>
                 <option value="ALL">Semua Jalur</option>
-                {categories.map((c: any, index: number) => <option key={c.id || `cp1-${index}`} value={c.id}>{c.name}</option>)}
+                {categories.map((c: any, index: number) => <option key={c.id || `cp1-${index}`} value={c.name}>{c.name}</option>)}
               </select>
             </div>
 
@@ -559,7 +518,7 @@ function StudentAdminModal({ student, masterGoals, categories, onClose, onSave }
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-[10px] font-black text-primary uppercase tracking-widest">{mg.points !== undefined ? mg.points : (mg as any).pointValue || 0} pts</span>
                           <span className="text-[10px] text-muted-foreground">•</span>
-                          <span className="text-[10px] font-medium text-muted-foreground">{categories.find((c: any)=>c.id === mg.categoryId)?.name}</span>
+                          <span className="text-[10px] font-medium text-muted-foreground">{mg.categoryName || '—'}</span>
                         </div>
                       </div>
                       
@@ -592,59 +551,6 @@ function StudentAdminModal({ student, masterGoals, categories, onClose, onSave }
             {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Konfirmasi Perubahan'}
           </Button>
         </div>
-
-        {/* Cropper Overlay */}
-        {cropImage && (
-          <div className="absolute inset-0 bg-background/90 z-[100] flex flex-col mt-0 border-t-0 p-0 shadow-none">
-            <div className="flex-1 relative">
-              <Cropper
-                image={cropImage}
-                crop={crop}
-                zoom={zoom}
-                aspect={1}
-                cropShape="round"
-                showGrid={false}
-                onCropChange={setCrop}
-                onCropComplete={onCropComplete}
-                onZoomChange={setZoom}
-              />
-            </div>
-            <div className="p-4 bg-background border-t border-border flex flex-col sm:flex-row gap-4 items-center justify-between">
-              <div className="flex items-center gap-4 w-full sm:w-1/2">
-                <ZoomOut className="text-muted-foreground w-5 h-5 flex-shrink-0" />
-                <input
-                  type="range"
-                  value={zoom}
-                  min={1}
-                  max={3}
-                  step={0.1}
-                  aria-labelledby="Zoom"
-                  onChange={(e) => setZoom(Number(e.target.value))}
-                  className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
-                />
-                <ZoomIn className="text-muted-foreground w-5 h-5 flex-shrink-0" />
-              </div>
-              <div className="flex gap-4">
-                <Button 
-                  variant="ghost"
-                  onClick={() => {
-                    setCropImage(null);
-                    if (fileInputRef.current) fileInputRef.current.value = '';
-                  }} 
-                  className="rounded-xl font-bold"
-                >
-                  Batal
-                </Button>
-                <Button 
-                  onClick={confirmCrop} 
-                  className="rounded-xl font-bold"
-                >
-                  Apply Crop
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
       </motion.div>
     </div>
   );

@@ -5,8 +5,11 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api';
 import type { Post } from '../../lib/types';
 import Link from 'next/link';
-import Image from 'next/image';
-import { ArrowLeft, CalendarDays, Clock, User } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Clock, User, ArrowRight, Eye } from 'lucide-react';
+import { HScroller, HScrollItem } from '@/components/ui/HScroller';
+import { ArticleCard } from '@/components/ui/ArticleCard';
+import { BlogContent } from '@/components/blog/BlogContent';
+import { ImageWithFallback } from '@/components/ui/ImageWithFallback';
 
 function formatDate(d?: string | null) {
   return d ? new Date(d).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }) : '-';
@@ -20,6 +23,16 @@ function readingTime(html?: string) {
 }
 
 export function BlogPostPage({ slug }: { slug: string }) {
+  const { data: allPosts = [] } = useQuery<Post[]>({
+    queryKey: ['public-posts'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/posts');
+      if (!res.ok) throw new Error('Failed to fetch posts');
+      const all: Post[] = await res.json();
+      return all.filter((p) => p.status === 'published');
+    },
+  });
+
   const { data: post, isLoading } = useQuery<Post>({
     queryKey: ['public-post', slug],
     queryFn: async () => {
@@ -32,8 +45,69 @@ export function BlogPostPage({ slug }: { slug: string }) {
     }
   });
 
+  // Reading progress (sticky bar at top)
+  const [progress, setProgress] = React.useState(0);
+  
+  // Track article read
+  React.useEffect(() => {
+    if (post && post.id) {
+      const KEY = `ppmh_read_${post.id}`;
+      // only count once per session
+      if (!sessionStorage.getItem(KEY)) {
+        sessionStorage.setItem(KEY, '1');
+        apiFetch('/api/track-article', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ postId: post.id })
+        }).catch(console.error);
+      }
+    }
+  }, [post?.id]);
+
+  React.useEffect(() => {
+    const onScroll = () => {
+      const h = document.documentElement;
+      const scrolled = h.scrollTop;
+      const max = h.scrollHeight - h.clientHeight;
+      setProgress(max > 0 ? Math.min(100, Math.max(0, (scrolled / max) * 100)) : 0);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+
+  // Related posts (same category, exclude current). Fallback to most recent.
+  const related = React.useMemo(() => {
+    if (!post) return [];
+    const others = allPosts.filter((p) => p.id !== post.id);
+    const sameCat = others.filter((p) => (p.category || '') === (post.category || ''));
+    const pool = sameCat.length >= 3 ? sameCat : [...sameCat, ...others.filter((p) => !sameCat.includes(p))];
+    return pool
+      .sort((a, b) => (b.published_at || '').localeCompare(a.published_at || ''))
+      .slice(0, 3);
+  }, [post, allPosts]);
+
   return (
     <div className="min-h-screen bg-background pb-24">
+      {/* Reading progress bar */}
+      <div
+        role="progressbar"
+        aria-label="Progres baca"
+        aria-valuenow={Math.round(progress)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className="fixed top-0 left-0 right-0 h-1 z-[60] bg-transparent pointer-events-none"
+      >
+        <div
+          className="h-full bg-primary transition-[width] duration-150 ease-out"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
       {post && (
         <script
           type="application/ld+json"
@@ -114,14 +188,24 @@ export function BlogPostPage({ slug }: { slug: string }) {
                 <Clock className="w-3.5 h-3.5" />
                 <span>{readingTime(post.content)}</span>
               </div>
+              <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
+              <div className="flex items-center gap-2" title="Total Views">
+                <Eye className="w-3.5 h-3.5" />
+                <span>{(post.organic_views || 0) + (post.offset_views || 0)}</span>
+              </div>
             </div>
 
             {/* Featured image */}
             {post.featured_image && (
               <figure className="mb-12 -mx-4 sm:mx-0">
-                <div className="relative w-full aspect-[16/9] bg-muted overflow-hidden">
-                  <Image src={post.featured_image} alt={post.title} fill referrerPolicy="no-referrer" priority className="object-cover" />
-                </div>
+                <ImageWithFallback 
+                  src={post.featured_image || null} 
+                  alt={post.title} 
+                  fallbackType="gradient"
+                  fill 
+                  priority
+                  containerClassName="w-full aspect-[16/9]"
+                />
                 <figcaption className="text-xs text-muted-foreground italic font-serif-body text-center mt-3 px-4">
                   {post.title}
                 </figcaption>
@@ -129,7 +213,8 @@ export function BlogPostPage({ slug }: { slug: string }) {
             )}
 
             {/* Body — drop cap, serif body */}
-            <section
+            <BlogContent
+              html={post.content}
               className="dropcap font-serif-body text-foreground/90 prose prose-lg max-w-none
                          prose-headings:font-display prose-headings:font-bold prose-headings:text-foreground
                          prose-h2:text-3xl prose-h2:mt-12 prose-h2:mb-4
@@ -138,7 +223,6 @@ export function BlogPostPage({ slug }: { slug: string }) {
                          prose-a:text-primary prose-a:no-underline hover:prose-a:underline
                          prose-blockquote:border-l-4 prose-blockquote:border-primary prose-blockquote:font-display prose-blockquote:italic prose-blockquote:text-2xl prose-blockquote:text-foreground
                          prose-img:rounded-none prose-img:mx-auto"
-              dangerouslySetInnerHTML={{ __html: post.content }}
             />
 
             {/* End mark */}
@@ -151,6 +235,33 @@ export function BlogPostPage({ slug }: { slug: string }) {
                 Kembali ke PPMH Insight
               </Link>
             </div>
+
+            {/* Related Posts */}
+            {related.length > 0 && (
+              <aside className="mt-20 pt-10 border-t border-border" aria-label="Saran postingan lain">
+                <div className="flex items-end justify-between gap-4 mb-6">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.4em] text-muted-foreground mb-2">
+                      Lanjutkan Membaca
+                    </p>
+                    <h2 className="font-display text-2xl md:text-3xl font-black text-foreground">
+                      Saran Postingan Lain
+                    </h2>
+                  </div>
+                  <Link href="/blog" className="hidden sm:inline-flex items-center text-foreground font-bold uppercase tracking-widest text-xs border-b border-foreground hover:text-primary hover:border-primary pb-1">
+                    Semua Artikel <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                  </Link>
+                </div>
+
+                <HScroller ariaLabel="Saran postingan lain">
+                  {related.map((rp) => (
+                    <HScrollItem key={rp.id}>
+                      <ArticleCard post={rp} />
+                    </HScrollItem>
+                  ))}
+                </HScroller>
+              </aside>
+            )}
           </article>
         )}
       </div>

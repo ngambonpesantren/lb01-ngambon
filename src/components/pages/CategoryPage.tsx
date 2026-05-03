@@ -8,6 +8,10 @@ import { ArrowLeft, ChevronRight, Clock } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import type { Post } from '@/lib/types';
 import { matchesCategorySlug, slugifyCategory } from '@/lib/categorySlug';
+import { CategoryChips } from '@/components/ui/CategoryChips';
+import { ArticleCard } from '@/components/ui/ArticleCard';
+import { SmartSearchBar, type SortKey } from '@/components/ui/SmartSearchBar';
+import { SimplePagination } from '@/components/ui/SimplePagination';
 
 function formatDate(d?: string | null) {
   return d
@@ -17,12 +21,11 @@ function formatDate(d?: string | null) {
 
 function todayLabel() {
   return new Date().toLocaleDateString('id-ID', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
 }
+
+const PAGE_SIZE = 9;
 
 export function CategoryPage({ slug }: { slug: string }) {
   const { data: posts = [], isLoading } = useQuery<Post[]>({
@@ -35,15 +38,68 @@ export function CategoryPage({ slug }: { slug: string }) {
     },
   });
 
-  const filtered = React.useMemo(
+  const inCategory = React.useMemo(
     () => posts.filter((p) => matchesCategorySlug(p.category, slug)),
     [posts, slug]
   );
 
-  // Recover the canonical category name from the first matching post.
-  const categoryName = filtered[0]?.category ?? slug.replace(/-/g, ' ');
+  const categoryName = inCategory[0]?.category ?? slug.replace(/-/g, ' ');
 
-  const [lead, ...rest] = filtered;
+  // Other categories for the chip bar (links, not filters)
+  const otherCategories = React.useMemo(() => {
+    const map = new Map<string, number>();
+    posts.forEach((p) => {
+      const cat = (p.category || 'Umum').trim();
+      map.set(cat, (map.get(cat) ?? 0) + 1);
+    });
+    return Array.from(map.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [posts]);
+
+  // Filter / sort
+  const [search, setSearch] = React.useState('');
+  const [sort, setSort] = React.useState<SortKey>('newest');
+  const [page, setPage] = React.useState(1);
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [search, sort, slug]);
+
+  const filtered = React.useMemo(() => {
+    let list = [...inCategory];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          (p.excerpt || '').toLowerCase().includes(q)
+      );
+    }
+    list.sort((a, b) => {
+      switch (sort) {
+        case 'oldest':
+          return (a.published_at || '').localeCompare(b.published_at || '');
+        case 'popular':
+          return (((b as any).views || 0) - ((a as any).views || 0));
+        case 'az':
+          return a.title.localeCompare(b.title);
+        case 'newest':
+        default:
+          return (b.published_at || '').localeCompare(a.published_at || '');
+      }
+    });
+    return list;
+  }, [inCategory, search, sort]);
+
+  const isFiltering = !!search.trim() || sort !== 'newest';
+  const lead = !isFiltering ? filtered[0] : undefined;
+  const gridStart = lead ? 1 : 0;
+  const gridList = filtered.slice(gridStart);
+
+  const totalPages = Math.max(1, Math.ceil(gridList.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageItems = gridList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -58,8 +114,7 @@ export function CategoryPage({ slug }: { slug: string }) {
           </Link>
         </nav>
 
-        {/* Category masthead */}
-        <header className="text-center border-y-4 border-double border-foreground py-8 md:py-10 mb-8">
+        <header className="text-center border-y-4 border-double border-foreground py-8 md:py-10 mb-6">
           <p className="text-[11px] uppercase tracking-[0.4em] text-muted-foreground mb-3">
             Kategori · {todayLabel()}
           </p>
@@ -67,15 +122,35 @@ export function CategoryPage({ slug }: { slug: string }) {
             {categoryName}
           </h1>
           <p className="text-sm md:text-base text-muted-foreground mt-4 italic font-serif-body">
-            {filtered.length} artikel terbit dalam kategori ini.
+            {inCategory.length} artikel terbit dalam kategori ini.
           </p>
         </header>
+      </div>
 
-        <div className="flex items-center gap-4 text-xs uppercase tracking-[0.25em] font-bold text-muted-foreground mb-10">
-          <span className="text-foreground">Daftar Artikel</span>
-          <span className="flex-1 editorial-rule" />
+      {/* Sticky discovery bar */}
+      <div className="sticky top-0 z-30 bg-background/85 backdrop-blur-sm border-y border-border">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8 py-4 space-y-3">
+          <SmartSearchBar
+            value={search}
+            onChange={setSearch}
+            sort={sort}
+            onSortChange={setSort}
+            placeholder={`Cari di ${categoryName}…`}
+            resultCount={isFiltering ? filtered.length : undefined}
+          />
+          {/* Chip bar acts as quick navigation between categories */}
+          {otherCategories.length > 0 && (
+            <CategoryChips
+              categories={otherCategories}
+              activeName={categoryName}
+              showAll
+              allLabel="Indeks"
+            />
+          )}
         </div>
+      </div>
 
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8 pt-10">
         {isLoading ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 h-[420px] bg-muted/40 rounded-sm" />
@@ -96,7 +171,7 @@ export function CategoryPage({ slug }: { slug: string }) {
           </div>
         ) : (
           <>
-            {/* Lead + tail in newspaper grid */}
+            {/* Lead story (only when not filtering) */}
             {lead && (
               <section className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-10 pb-12 mb-12 border-b border-border">
                 <article className="lg:col-span-2 group">
@@ -135,7 +210,7 @@ export function CategoryPage({ slug }: { slug: string }) {
                 </article>
 
                 <aside className="lg:col-span-1 lg:border-l lg:border-border lg:pl-8 space-y-8 divide-y divide-border">
-                  {rest.slice(0, 3).map((post, idx) => (
+                  {filtered.slice(1, 4).map((post, idx) => (
                     <article key={post.id} className={`group ${idx > 0 ? 'pt-8' : ''}`}>
                       <Link href={`/blog/${post.slug || post.id}`} className="block">
                         {post.featured_image && (
@@ -152,15 +227,6 @@ export function CategoryPage({ slug }: { slug: string }) {
                         <h3 className="font-display text-xl font-bold text-foreground leading-tight group-hover:text-primary transition-colors">
                           {post.title}
                         </h3>
-                        {post.excerpt && (
-                          <p className="font-serif-body text-sm text-foreground/70 mt-2 leading-relaxed line-clamp-2">
-                            {post.excerpt}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-muted-foreground mt-3 font-semibold">
-                          <Clock className="w-3 h-3" />
-                          <time>{formatDate(post.published_at)}</time>
-                        </div>
                       </Link>
                     </article>
                   ))}
@@ -168,53 +234,40 @@ export function CategoryPage({ slug }: { slug: string }) {
               </section>
             )}
 
-            {rest.length > 3 && (
-              <>
-                <div className="flex items-center gap-4 text-xs uppercase tracking-[0.25em] font-bold text-muted-foreground mb-8">
-                  <span className="text-foreground">Lebih Banyak di {categoryName}</span>
-                  <span className="flex-1 editorial-rule" />
+            <section>
+              <div className="flex items-center gap-4 text-xs uppercase tracking-[0.25em] font-bold text-muted-foreground mb-8">
+                <span className="text-foreground">
+                  {isFiltering ? 'Hasil' : `Lebih Banyak di ${categoryName}`}
+                </span>
+                <span className="flex-1 editorial-rule" />
+                <span>{gridList.length} artikel</span>
+              </div>
+
+              {pageItems.length === 0 ? (
+                <div className="py-16 text-center border border-dashed border-border">
+                  <p className="font-serif-body italic text-muted-foreground">
+                    Tidak ada artikel yang cocok. Reset filter atau ubah kata kunci.
+                  </p>
                 </div>
-                <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
-                  {rest.slice(3).map((post) => (
-                    <article key={post.id} className="group">
-                      <Link href={`/blog/${post.slug || post.id}`} className="block">
-                        {post.featured_image ? (
-                          <div className="relative w-full aspect-[4/3] overflow-hidden mb-4 bg-muted">
-                            <Image
-                              src={post.featured_image}
-                              alt={post.title}
-                              fill
-                              referrerPolicy="no-referrer"
-                              className="object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-                            />
-                          </div>
-                        ) : (
-                          <div className="w-full aspect-[4/3] bg-foreground/[0.03] flex items-center justify-center mb-4">
-                            <span className="font-display text-foreground/10 text-4xl font-black">PPMH</span>
-                          </div>
-                        )}
-                        <h3 className="font-display text-xl font-bold text-foreground leading-tight group-hover:text-primary transition-colors line-clamp-3">
-                          {post.title}
-                        </h3>
-                        {post.excerpt && (
-                          <p className="font-serif-body text-sm text-foreground/70 mt-2 leading-relaxed line-clamp-2">
-                            {post.excerpt}
-                          </p>
-                        )}
-                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-border">
-                          <time className="text-[11px] uppercase tracking-widest text-muted-foreground font-semibold">
-                            {formatDate(post.published_at)}
-                          </time>
-                          <span className="inline-flex items-center text-xs font-bold text-primary uppercase tracking-widest">
-                            Baca <ChevronRight className="w-3 h-3 ml-0.5 transition-transform group-hover:translate-x-0.5" />
-                          </span>
-                        </div>
-                      </Link>
-                    </article>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
+                  {pageItems.map((post) => (
+                    <ArticleCard key={post.id} post={post} showViews={sort === 'popular'} />
                   ))}
-                </section>
-              </>
-            )}
+                </div>
+              )}
+
+              <SimplePagination
+                page={currentPage}
+                totalPages={totalPages}
+                onChange={(p) => {
+                  setPage(p);
+                  if (typeof window !== 'undefined') {
+                    window.scrollTo({ top: 320, behavior: 'smooth' });
+                  }
+                }}
+              />
+            </section>
           </>
         )}
       </div>

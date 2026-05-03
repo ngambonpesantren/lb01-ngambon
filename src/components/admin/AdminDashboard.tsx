@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 // Tooltip extracted locally? Or just removed because we didn't add the lib
-import { LogOut, CheckSquare, Target, FolderTree, Palette, Settings, Database, Server, Info, LayoutDashboard, Loader2, MoreHorizontal, ShieldCheck, Search, Users, UserCog, BookOpen } from 'lucide-react';
+import { LogOut, CheckSquare, Target, FolderTree, Palette, Settings, Database, Server, Info, LayoutDashboard, Loader2, MoreHorizontal, ShieldCheck, Search, Users, UserCog, BookOpen, HardDrive } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiFetch, removeLocalToken } from '../../lib/api';
 import { trackEvent } from '../../lib/analytics';
@@ -9,10 +9,10 @@ import { AdminGoalsTab } from './AdminGoalsTab';
 import { AdminAppearanceTab } from './AdminAppearanceTab';
 import { AdminStatisticsTab } from './AdminStatisticsTab';
 import { AdminImportExportTab } from '../AdminImportExportTab';
-import { AdminBackendTab } from '../AdminBackendTab';
 import CacheHealthTab from '../CacheHealthTab';
 import { AdminUserManagement } from './AdminUserManagement';
 import { AdminBlogTab } from './AdminBlogTab';
+import { AdminDatabaseTab } from './AdminDatabaseTab';
 import { useAuthRole } from '@/hooks/useAuthRole';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import type { Category, MasterGoal, AssignedGoal, Student } from '../../lib/types';
@@ -78,10 +78,10 @@ export function AdminDashboard({ students, refreshData, masterGoals, categories,
               { id: 'students', label: 'Siswa', icon: Users, show: true },
               { id: 'goals', label: 'Jalur & Tujuan', icon: Target, show: true },
               { id: 'blog', label: 'Insight CMS', icon: BookOpen, show: true },
+              { id: 'database', label: 'Database Manager', icon: HardDrive, show: true },
               { id: 'appearance', label: 'Tampilan', icon: Palette, show: true },
               { id: 'statistics', label: 'Statistik', icon: Search, show: true },
               { id: 'import-export', label: 'Impor / Ekspor', icon: Database, show: true },
-              { id: 'backend', label: 'Backend & DB', icon: Server, show: isSuperAdmin },
               { id: 'admin-users', label: isSuperAdmin ? 'Manajemen Admin' : 'Profil Editor', icon: UserCog, show: true },
               { id: 'cache', label: 'Manajemen PWA', icon: ShieldCheck, show: true }
             ].filter(t => t.show).map(tab => (
@@ -122,6 +122,9 @@ export function AdminDashboard({ students, refreshData, masterGoals, categories,
           {activeTab === 'blog' && (
             <AdminBlogTab />
           )}
+          {activeTab === 'database' && (
+            <AdminDatabaseTab />
+          )}
           {activeTab === 'appearance' && (
             <AdminAppearanceTab refreshData={refreshData} appSettings={appSettings} setAppSettings={() => queryClient.invalidateQueries({ queryKey: ['app-data'] })} />
           )}
@@ -136,9 +139,6 @@ export function AdminDashboard({ students, refreshData, masterGoals, categories,
               categories={categories}
               refreshData={refreshData}
             />
-          )}
-          {activeTab === 'backend' && (
-            <AdminBackendTab refreshData={refreshData} />
           )}
           {activeTab === 'admin-users' && (
             <AdminUserManagement />
