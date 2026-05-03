@@ -177,11 +177,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
                 Leaderboard
               </button>
 
-              {isAdmin ? (
-                <button onClick={() => router.push("/admin")} className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all ${(pathname || "").startsWith("/admin") ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:bg-secondary"}`}>
-                  <Settings className="h-4 w-4" /> Admin Panel
-                </button>
-              ) : (
+              {!isAdmin && (
                 <button onClick={() => router.push("/login")} className="px-4 py-2 rounded-xl text-sm font-semibold text-primary hover:bg-primary/10 border border-primary/20 transition-all">
                   Login
                 </button>
@@ -200,7 +196,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
         </ErrorBoundary>
       </main>
 
-      {/* Phase 3: Bottom-left Floating Settings FAB */}
+      {/* Floating Settings FAB – bottom-right, below ScrollToTop */}
       <FloatingSettingsFab
         themeMode={themeMode}
         toggleTheme={toggleTheme}
@@ -210,46 +206,54 @@ function AppContent({ children }: { children: React.ReactNode }) {
         isAdmin={isAdmin}
       />
 
-      {/* Scroll to top – bottom-right */}
-      <div className="fixed bottom-20 md:bottom-6 right-4 z-50">
+      {/* Scroll to top – bottom-right, above FAB */}
+      <div className="fixed bottom-32 md:bottom-20 right-4 z-50">
         <ScrollToTop />
       </div>
 
       <PwaDownloadPrompt />
 
-      {/* Phase 4: Mobile Bottom Nav – Leaderboard | Logo | Berita */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border px-8 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] flex justify-between items-center md:hidden z-50">
-        <button
-          onClick={() => {
-            if (navigator.vibrate) navigator.vibrate(50);
-            router.push("/leaderboard");
-          }}
-          className={`flex flex-col items-center gap-1.5 transition-colors ${pathname === "/leaderboard" ? "text-primary" : "text-muted-foreground/60 hover:text-muted-foreground"}`}
-        >
-          <BarChart3 className="w-6 h-6" />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Leaderboard</span>
-        </button>
+      {/* Mobile Bottom Nav – Leaderboard | Logo (absolute center) | Berita */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden z-50">
+        {/* Logo – absolute center of screen */}
+        <div className="absolute left-1/2 -translate-x-1/2 -top-8 z-10">
+          {appSettings?.logoUrl ? (
+            <div className="w-16 h-16 rounded-full border-4 border-border bg-card shadow-soft flex items-center justify-center overflow-hidden cursor-pointer active:scale-95 transition-transform" onClick={() => router.push("/")}>
+              <ImageFallback src={appSettings.logoUrl} alt="Logo" variant="logo" className="w-full h-full object-cover" wrapperClassName="w-full h-full" />
+            </div>
+          ) : (
+            <div className="w-16 h-16 rounded-full border-4 border-border bg-card shadow-soft flex items-center justify-center text-primary cursor-pointer active:scale-95 transition-transform" onClick={() => router.push("/")}>
+              <Trophy className="w-8 h-8" />
+            </div>
+          )}
+        </div>
 
-        {appSettings?.logoUrl ? (
-          <div className="w-16 h-16 -mt-8 rounded-full border-4 border-border bg-card shadow-soft flex items-center justify-center overflow-hidden z-10 cursor-pointer active:scale-95 transition-transform" onClick={() => router.push("/")}>
-            <ImageFallback src={appSettings.logoUrl} alt="Logo" variant="logo" className="w-full h-full object-cover" wrapperClassName="w-full h-full" />
-          </div>
-        ) : (
-          <div className="w-16 h-16 -mt-8 rounded-full border-4 border-border bg-card shadow-soft flex items-center justify-center z-10 text-primary cursor-pointer active:scale-95 transition-transform" onClick={() => router.push("/")}>
-            <Trophy className="w-8 h-8" />
-          </div>
-        )}
+        <div className="flex justify-between items-center px-8">
+          <button
+            onClick={() => {
+              if (navigator.vibrate) navigator.vibrate(50);
+              router.push("/leaderboard");
+            }}
+            className={`flex flex-col items-center gap-1.5 transition-colors ${pathname === "/leaderboard" ? "text-primary" : "text-muted-foreground/60 hover:text-muted-foreground"}`}
+          >
+            <BarChart3 className="w-6 h-6" />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Leaderboard</span>
+          </button>
 
-        <button
-          onClick={() => {
-            if (navigator.vibrate) navigator.vibrate(50);
-            router.push("/blog");
-          }}
-          className={`flex flex-col items-center gap-1.5 transition-colors ${(pathname || "").startsWith("/blog") || (pathname || "").startsWith("/berita") ? "text-primary" : "text-muted-foreground/60 hover:text-muted-foreground"}`}
-        >
-          <Newspaper className="w-6 h-6" />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Berita</span>
-        </button>
+          {/* Spacer for logo */}
+          <div className="w-16" />
+
+          <button
+            onClick={() => {
+              if (navigator.vibrate) navigator.vibrate(50);
+              router.push("/blog");
+            }}
+            className={`flex flex-col items-center gap-1.5 transition-colors ${(pathname || "").startsWith("/blog") || (pathname || "").startsWith("/berita") ? "text-primary" : "text-muted-foreground/60 hover:text-muted-foreground"}`}
+          >
+            <Newspaper className="w-6 h-6" />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Berita</span>
+          </button>
+        </div>
       </nav>
     </div>
   );
