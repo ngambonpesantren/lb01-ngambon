@@ -33,7 +33,7 @@ export function FloatingSettingsFab({
   const queryClient = useQueryClient();
 
   return (
-    <div className="fixed bottom-20 md:bottom-6 left-4 z-50 flex flex-col-reverse items-start gap-2">
+    <div className="fixed bottom-20 md:bottom-6 right-4 z-50 flex flex-col-reverse items-end gap-2">
       {/* Trigger */}
       <button
         onClick={() => setOpen((v) => !v)}
@@ -51,7 +51,7 @@ export function FloatingSettingsFab({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.9 }}
             transition={{ duration: 0.15 }}
-            className="bg-popover border border-border rounded-xl shadow-md p-3 flex flex-col gap-2 min-w-[180px]"
+            className="bg-popover border border-border rounded-xl shadow-md p-3 flex flex-col gap-2 min-w-[180px] items-end"
           >
             {/* Dark/Light toggle */}
             <button
@@ -71,44 +71,40 @@ export function FloatingSettingsFab({
               <span className="truncate">{activePresetName}</span>
             </button>
 
-            {/* Auth – mobile only */}
-            {!isDesktop && (
+            {/* Auth actions */}
+            <div className="h-px bg-border my-1 w-full" />
+            {isAdmin ? (
               <>
-                <div className="h-px bg-border my-1" />
-                {isAdmin ? (
-                  <>
-                    <button
-                      onClick={() => { setOpen(false); router.push("/admin"); }}
-                      className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-foreground"
-                    >
-                      <Settings className="w-4 h-4" />
-                      Admin Panel
-                    </button>
-                    <button
-                      onClick={async () => {
-                        await apiFetch("/api/logout", { method: "POST" });
-                        removeLocalToken();
-                        queryClient.setQueryData(["auth"], { authenticated: false });
-                        trackEvent("admin_logout", { isAdmin: true });
-                        setOpen(false);
-                        router.push("/");
-                      }}
-                      className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-red-500"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      Logout
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => { setOpen(false); router.push("/login"); }}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-foreground"
-                  >
-                    <LogIn className="w-4 h-4" />
-                    Login
-                  </button>
-                )}
+                <button
+                  onClick={() => { setOpen(false); router.push("/admin"); }}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-foreground w-full"
+                >
+                  <Settings className="w-4 h-4" />
+                  Admin Panel
+                </button>
+                <button
+                  onClick={async () => {
+                    await apiFetch("/api/logout", { method: "POST" });
+                    removeLocalToken();
+                    queryClient.setQueryData(["auth"], { authenticated: false });
+                    trackEvent("admin_logout", { isAdmin: true });
+                    setOpen(false);
+                    router.push("/");
+                  }}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-red-500 w-full"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </button>
               </>
+            ) : (
+              <button
+                onClick={() => { setOpen(false); router.push("/login"); }}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-foreground w-full"
+              >
+                <LogIn className="w-4 h-4" />
+                Login
+              </button>
             )}
           </motion.div>
         )}
