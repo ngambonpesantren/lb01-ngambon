@@ -281,3 +281,107 @@ html {
 .dark .editorial-rule {
   background-image: repeating-linear-gradient(to right, hsl(var(--foreground) / 0.4) 0 6px, transparent 6px 10px);
 }
+
+/* ============= ProseMirror Editor Typography ============= */
+.ProseMirror {
+  outline: none !important;
+}
+
+.ProseMirror h1 {
+  font-size: 2.25em;
+  font-weight: 800;
+  line-height: 1.15;
+  margin-top: 1.25em;
+  margin-bottom: 0.6em;
+  font-family: var(--font-heading);
+}
+
+.ProseMirror h2 {
+  font-size: 1.5em;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-top: 1.2em;
+  margin-bottom: 0.5em;
+  font-family: var(--font-heading);
+}
+
+.ProseMirror h3 {
+  font-size: 1.25em;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 1em;
+  margin-bottom: 0.4em;
+  font-family: var(--font-heading);
+}
+
+.ProseMirror h4 {
+  font-size: 1.1em;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 0.8em;
+  margin-bottom: 0.3em;
+}
+
+.ProseMirror p {
+  margin-top: 0;
+  margin-bottom: 0.75em;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.75em;
+}
+
+.ProseMirror blockquote {
+  border-left: 4px solid hsl(var(--primary));
+  padding-left: 1em;
+  margin-left: 0;
+  font-style: italic;
+  color: hsl(var(--muted-foreground));
+}
+
+.ProseMirror pre {
+  background: hsl(var(--muted));
+  border-radius: 0.5rem;
+  padding: 1em;
+  overflow-x: auto;
+  font-size: 0.875em;
+  margin-bottom: 0.75em;
+}
+
+.ProseMirror code {
+  background: hsl(var(--muted));
+  border-radius: 0.25rem;
+  padding: 0.15em 0.35em;
+  font-size: 0.875em;
+}
+
+.ProseMirror pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+.ProseMirror hr {
+  border: none;
+  border-top: 2px solid hsl(var(--border));
+  margin: 1.5em 0;
+}
+
+/* Notion-style drag handle */
+.node-drag-handle {
+  opacity: 0;
+  transition: opacity 150ms ease;
+  cursor: grab;
+  user-select: none;
+}
+
+.node-drag-handle:active {
+  cursor: grabbing;
+}
+
+.group:hover > .node-drag-handle,
+.group\/block:hover > .node-drag-handle {
+  opacity: 1;
+}
