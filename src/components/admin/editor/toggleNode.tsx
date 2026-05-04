@@ -6,7 +6,7 @@ import {
   NodeViewContent,
   NodeViewProps,
 } from '@tiptap/react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, GripVertical } from 'lucide-react';
 
 /**
  * Notion-like Toggle Block — infinitely nestable.
@@ -22,7 +22,7 @@ import { ChevronRight } from 'lucide-react';
  *   </details>
  */
 
-function ToggleView({ node, updateAttributes }: NodeViewProps) {
+const ToggleView = React.memo(function ToggleView({ node, updateAttributes }: NodeViewProps) {
   const open = node.attrs.open !== false;
 
   return (
@@ -30,9 +30,17 @@ function ToggleView({ node, updateAttributes }: NodeViewProps) {
       as="div"
       data-block="toggle"
       data-open={open ? 'true' : 'false'}
-      className="toggle-block group/toggle my-1.5"
+      className="toggle-block group/block relative my-1.5 flex items-start gap-1"
     >
-      <div className="flex items-start gap-1">
+      <div
+        contentEditable={false}
+        data-drag-handle
+        className="node-drag-handle mt-[0.35rem] shrink-0 w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+        aria-label="Drag to reorder"
+      >
+        <GripVertical className="w-3.5 h-3.5" />
+      </div>
+      <div className="flex items-start gap-1 flex-1 min-w-0">
         <button
           type="button"
           contentEditable={false}
@@ -54,7 +62,7 @@ function ToggleView({ node, updateAttributes }: NodeViewProps) {
       </div>
     </NodeViewWrapper>
   );
-}
+});
 
 export const ToggleBlock = Node.create({
   name: 'toggleBlock',
