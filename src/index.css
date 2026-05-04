@@ -334,6 +334,30 @@ html {
   margin-bottom: 0.75em;
 }
 
+.ProseMirror ul {
+  list-style-type: disc;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+}
+
+.ProseMirror ul ul {
+  list-style-type: circle;
+}
+
+.ProseMirror ul ul ul {
+  list-style-type: square;
+}
+
+.ProseMirror li {
+  margin-bottom: 0.25em;
+}
+
+.ProseMirror li p {
+  margin-bottom: 0.25em;
+}
+
 .ProseMirror blockquote {
   border-left: 4px solid hsl(var(--primary));
   padding-left: 1em;
