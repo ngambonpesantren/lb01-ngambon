@@ -33,7 +33,7 @@ export function FloatingSettingsFab({
   const queryClient = useQueryClient();
 
   return (
-    <div className="fixed bottom-20 md:bottom-6 right-4 z-50 flex flex-col-reverse items-end gap-2">
+    <div className="fixed bottom-28 md:bottom-6 right-4 z-50 flex flex-col-reverse items-end gap-3">
       {/* Trigger */}
       <button
         onClick={() => setOpen((v) => !v)}
@@ -51,12 +51,12 @@ export function FloatingSettingsFab({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.9 }}
             transition={{ duration: 0.15 }}
-            className="bg-popover border border-border rounded-xl shadow-md p-3 flex flex-col gap-2 min-w-[180px] items-end"
+            className="bg-popover border border-border rounded-xl shadow-md p-3 flex flex-col gap-2 w-[240px]"
           >
             {/* Dark/Light toggle */}
             <button
               onClick={toggleTheme}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-foreground"
+              className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-foreground w-full text-left"
             >
               {themeMode === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               {themeMode === "dark" ? "Light Mode" : "Dark Mode"}
@@ -65,9 +65,9 @@ export function FloatingSettingsFab({
             {/* Preset cycle */}
             <button
               onClick={cyclePreset}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-foreground"
+              className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary transition-colors text-sm text-foreground w-full text-left"
             >
-              <Palette className="w-4 h-4" />
+              <Palette className="w-4 h-4 shrink-0" />
               <span className="truncate">{activePresetName}</span>
             </button>
 

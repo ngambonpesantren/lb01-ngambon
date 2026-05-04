@@ -2,7 +2,124 @@
 
 import React from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
-import { ChevronDown, ChevronLeft, ChevronRight, Quote } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Quote, FileText, Link as LinkIcon, Download } from 'lucide-react';
+
+/* ---------- Toggle (Notion-style, recursive) ---------- */
+
+function ToggleBlockView({
+  title,
+  childrenHtml,
+  defaultOpen,
+}: { title: string; childrenHtml: string; defaultOpen: boolean }) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <div className="toggle-block not-prose my-2">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="w-full flex items-start gap-2 text-left py-1 hover:bg-muted/40 rounded transition-colors"
+      >
+        <ChevronRight
+          className={`w-4 h-4 mt-1.5 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-90 text-foreground' : ''}`}
+        />
+        <span className="flex-1 font-medium text-foreground leading-relaxed">{title}</span>
+      </button>
+      {open && (
+        <div className="pl-6 ml-2 border-l border-border/60 mt-1 mb-2">
+          <BlogContent html={childrenHtml} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Bookmark card ---------- */
+
+function BookmarkCardView({ url, title, description, image, siteName }: {
+  url: string; title: string; description: string; image: string; siteName: string;
+}) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="bookmark-card not-prose my-5 flex items-stretch border border-border rounded-xl overflow-hidden bg-card hover:border-primary/60 hover:shadow-soft transition-all no-underline group/bm"
+    >
+      <div className="flex-1 min-w-0 p-4 flex flex-col gap-1.5">
+        <div className="font-semibold text-foreground line-clamp-2 group-hover/bm:text-primary transition-colors">
+          {title || url}
+        </div>
+        {description && (
+          <div className="text-sm text-muted-foreground line-clamp-2">{description}</div>
+        )}
+        <div className="text-xs text-muted-foreground/80 mt-auto pt-2 truncate flex items-center gap-1.5">
+          <LinkIcon className="w-3 h-3 shrink-0" />
+          <span className="truncate">{siteName || url}</span>
+        </div>
+      </div>
+      {image && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={image} alt="" className="w-32 sm:w-44 object-cover shrink-0 border-l border-border" />
+      )}
+    </a>
+  );
+}
+
+/* ---------- File attachment card ---------- */
+
+function FileAttachmentView({ url, name, size }: { url: string; name: string; size: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="file-attachment not-prose my-5 flex items-center gap-4 p-4 border border-border rounded-xl bg-card hover:border-primary/60 hover:shadow-soft transition-all no-underline group/fa"
+    >
+      <div className="shrink-0 w-12 h-14 rounded-md bg-gradient-to-br from-primary/20 to-primary/5 border border-border flex items-center justify-center">
+        <FileText className="w-6 h-6 text-primary" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold text-foreground truncate group-hover/fa:text-primary transition-colors">
+          {name || 'File'}
+        </div>
+        <div className="text-xs text-muted-foreground truncate">{size || 'Klik untuk membuka / unduh'}</div>
+      </div>
+      <Download className="w-4 h-4 text-muted-foreground group-hover/fa:text-primary transition-colors shrink-0" />
+    </a>
+  );
+}
+
+/* ---------- Video block ---------- */
+
+function VideoBlockView({ src, provider }: { src: string; provider: string }) {
+  if (!src) return null;
+  const isFile = provider === 'file' || /\.(mp4|webm|ogg)(\?.*)?$/i.test(src);
+  let embed = src;
+  if (provider === 'youtube' || /youtube\.com|youtu\.be/i.test(src)) {
+    const m = src.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{6,})/);
+    if (m) embed = `https://www.youtube.com/embed/${m[1]}`;
+  } else if (provider === 'vimeo' || /vimeo\.com/i.test(src)) {
+    const m = src.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    if (m) embed = `https://player.vimeo.com/video/${m[1]}`;
+  }
+
+  return (
+    <div className="not-prose my-6 rounded-xl overflow-hidden border border-border bg-black aspect-video">
+      {isFile ? (
+        <video src={src} controls className="w-full h-full" />
+      ) : (
+        <iframe
+          src={embed}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          className="w-full h-full"
+          title="Video"
+        />
+      )}
+    </div>
+  );
+}
 
 /* ---------- Block components ---------- */
 
@@ -259,7 +376,11 @@ type Chunk =
   | { type: 'tabs'; items: { label: string; body: string }[] }
   | { type: 'simple-table'; headers: string[]; rows: string[][] }
   | { type: 'image-carousel'; items: { src: string; alt?: string; caption?: string }[] }
-  | { type: 'quote-carousel'; items: { quote: string; attribution?: string }[] };
+  | { type: 'quote-carousel'; items: { quote: string; attribution?: string }[] }
+  | { type: 'toggle'; title: string; childrenHtml: string; defaultOpen: boolean }
+  | { type: 'bookmark'; url: string; title: string; description: string; image: string; siteName: string }
+  | { type: 'file-attachment'; url: string; name: string; size: string }
+  | { type: 'video'; src: string; provider: string };
 
 function parseContent(html: string): Chunk[] {
   if (typeof window === 'undefined') {
@@ -289,6 +410,44 @@ function parseContent(html: string): Chunk[] {
           });
           else if (block === 'image-carousel') chunks.push({ type: 'image-carousel', items: JSON.parse(el.getAttribute('data-items') || '[]') });
           else if (block === 'quote-carousel') chunks.push({ type: 'quote-carousel', items: JSON.parse(el.getAttribute('data-items') || '[]') });
+          else if (block === 'toggle' && el.tagName.toLowerCase() === 'details') {
+            // First child <p> is the summary/title; remaining children are body.
+            const children = Array.from(el.children);
+            const titleEl = children.find((c) => c.tagName.toLowerCase() === 'p');
+            const title = (titleEl?.textContent || '').trim();
+            const bodyHtml = children
+              .filter((c) => c !== titleEl)
+              .map((c) => (c as HTMLElement).outerHTML)
+              .join('');
+            chunks.push({
+              type: 'toggle',
+              title: title || 'Toggle',
+              childrenHtml: bodyHtml,
+              defaultOpen: el.hasAttribute('open'),
+            });
+          } else if (block === 'bookmark') {
+            chunks.push({
+              type: 'bookmark',
+              url: el.getAttribute('href') || '',
+              title: el.getAttribute('data-title') || '',
+              description: el.getAttribute('data-description') || '',
+              image: el.getAttribute('data-image') || '',
+              siteName: el.getAttribute('data-site') || '',
+            });
+          } else if (block === 'file-attachment') {
+            chunks.push({
+              type: 'file-attachment',
+              url: el.getAttribute('href') || '',
+              name: el.getAttribute('data-name') || '',
+              size: el.getAttribute('data-size') || '',
+            });
+          } else if (block === 'video') {
+            chunks.push({
+              type: 'video',
+              src: el.getAttribute('data-src') || '',
+              provider: el.getAttribute('data-provider') || '',
+            });
+          }
         } catch {
           // ignore malformed
         }
@@ -324,6 +483,21 @@ export function BlogContent({ html, className }: { html: string; className?: str
             return <ImageCarouselBlock key={i} items={c.items} />;
           case 'quote-carousel':
             return <QuoteCarouselBlock key={i} items={c.items} />;
+          case 'toggle':
+            return (
+              <ToggleBlockView
+                key={i}
+                title={c.title}
+                childrenHtml={c.childrenHtml}
+                defaultOpen={c.defaultOpen}
+              />
+            );
+          case 'bookmark':
+            return <BookmarkCardView key={i} {...c} />;
+          case 'file-attachment':
+            return <FileAttachmentView key={i} url={c.url} name={c.name} size={c.size} />;
+          case 'video':
+            return <VideoBlockView key={i} src={c.src} provider={c.provider} />;
         }
       })}
     </div>

@@ -5,12 +5,20 @@ import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
-import { Bold, Italic, Strikethrough, Heading1, Heading2, List, ListOrdered, Quote, Undo, Redo, Link as LinkIcon, ImageIcon, X, Upload, ChevronDown, LayoutGrid, Table as TableIcon, GalleryHorizontal, MessageSquareQuote } from 'lucide-react';
+import Typography from '@tiptap/extension-typography';
+import { Bold, Italic, Strikethrough, Heading1, Heading2, List, ListOrdered, Quote, Undo, Redo, Link as LinkIcon, ImageIcon, X, Upload, ChevronDown, LayoutGrid, Table as TableIcon, GalleryHorizontal, MessageSquareQuote, ChevronRight, Code2, Video, Link2, FileText } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useEffect, useState } from 'react';
 import { AccordionBlock, TabsBlock, SimpleTableBlock, ImageCarouselBlock, QuoteCarouselBlock } from './editor/blockNodes';
+import { ToggleBlock } from './editor/toggleNode';
+import { VideoBlock, BookmarkBlock, FileAttachmentBlock } from './editor/mediaNodes';
 import { batchUploadImages } from '@/lib/uploadImage';
 import { toast } from 'sonner';
+import { Markdown } from 'tiptap-markdown';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import { createLowlight, common } from 'lowlight';
+
+const lowlight = createLowlight(common);
 
 // Custom Extension to center image
 const CenteredImage = Image.extend({
@@ -32,15 +40,33 @@ export function TiptapEditor({ content, onChange }: { content: string, onChange:
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        // Disable default codeBlock so we can replace with lowlight version
+        codeBlock: false,
+      }),
+      Markdown.configure({
+        html: true,
+        tightLists: true,
+        bulletListMarker: '-',
+        linkify: true,
+        breaks: false,
+        transformPastedText: true,
+        transformCopiedText: false,
+      }),
+      CodeBlockLowlight.configure({ lowlight, defaultLanguage: 'plaintext' }),
+      Typography,
       CenteredImage,
       Link.configure({ openOnClick: false }),
-      Placeholder.configure({ placeholder: 'Tulis ceritamu di sini...' }),
+      Placeholder.configure({ placeholder: 'Tulis ceritamu di sini... (gunakan # untuk Heading 1, ## Heading 2, > kutipan, - list, >> toggle, ``` code, dst)' }),
       AccordionBlock,
       TabsBlock,
       SimpleTableBlock,
       ImageCarouselBlock,
       QuoteCarouselBlock,
+      ToggleBlock,
+      VideoBlock,
+      BookmarkBlock,
+      FileAttachmentBlock,
     ],
     content,
     onUpdate: ({ editor }) => {
@@ -56,7 +82,7 @@ export function TiptapEditor({ content, onChange }: { content: string, onChange:
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose-base dark:prose-invert max-w-none focus:outline-none min-h-[300px] p-4 bg-background text-foreground rounded-b-xl border-x border-b border-border'
+        class: 'prose prose-sm sm:prose-base dark:prose-invert max-w-none focus:outline-none min-h-[300px] p-4 bg-background text-foreground rounded-b-xl border-x border-b border-border prose-headings:font-display prose-headings:font-bold prose-a:text-primary prose-blockquote:border-l-4 prose-blockquote:border-primary prose-blockquote:italic prose-img:rounded-lg prose-img:mx-auto'
       }
     }
   });
@@ -110,6 +136,18 @@ export function TiptapEditor({ content, onChange }: { content: string, onChange:
         <Button variant="ghost" size="icon" onClick={() => editor.chain().focus().toggleBulletList().run()} className={editor.isActive('bulletList') ? 'bg-secondary' : ''}><List className="w-4 h-4" /></Button>
         <Button variant="ghost" size="icon" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={editor.isActive('orderedList') ? 'bg-secondary' : ''}><ListOrdered className="w-4 h-4" /></Button>
         <Button variant="ghost" size="icon" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={editor.isActive('blockquote') ? 'bg-secondary' : ''}><Quote className="w-4 h-4" /></Button>
+        <Button variant="ghost" size="icon" title="Code Block (```)" onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={editor.isActive('codeBlock') ? 'bg-secondary' : ''}><Code2 className="w-4 h-4" /></Button>
+        <Button variant="ghost" size="icon" title="Toggle Block (>>)"
+          onClick={() => editor.chain().focus().insertContent({
+            type: 'toggleBlock',
+            attrs: { open: true },
+            content: [
+              { type: 'paragraph', content: [{ type: 'text', text: 'Toggle title' }] },
+              { type: 'paragraph', content: [{ type: 'text', text: 'Hidden content...' }] },
+            ],
+          }).run()}>
+          <ChevronRight className="w-4 h-4" />
+        </Button>
         <div className="w-[1px] h-6 bg-border mx-1" />
         <Button variant="ghost" size="icon" onClick={() => {
             const url = window.prompt('URL Tautan:');
@@ -147,6 +185,18 @@ export function TiptapEditor({ content, onChange }: { content: string, onChange:
         <Button variant="ghost" size="icon" title="Sisipkan Carousel Kutipan"
           onClick={() => editor.chain().focus().insertContent({ type: 'quoteCarouselBlock' }).run()}>
           <MessageSquareQuote className="w-4 h-4" />
+        </Button>
+        <Button variant="ghost" size="icon" title="Sisipkan Video (YouTube/Vimeo/MP4)"
+          onClick={() => editor.chain().focus().insertContent({ type: 'videoBlock' }).run()}>
+          <Video className="w-4 h-4" />
+        </Button>
+        <Button variant="ghost" size="icon" title="Sisipkan Web Bookmark"
+          onClick={() => editor.chain().focus().insertContent({ type: 'bookmarkBlock' }).run()}>
+          <Link2 className="w-4 h-4" />
+        </Button>
+        <Button variant="ghost" size="icon" title="Sisipkan File / PDF"
+          onClick={() => editor.chain().focus().insertContent({ type: 'fileAttachmentBlock' }).run()}>
+          <FileText className="w-4 h-4" />
         </Button>
 
         <div className="flex-1" />
