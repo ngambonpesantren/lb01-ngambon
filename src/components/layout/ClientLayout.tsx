@@ -11,7 +11,7 @@ import {
 import { useAuthQuery, useAppDataQuery } from "@/hooks/useAppQueries";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { apiFetch, removeLocalToken } from "@/lib/api";
-import { trackEvent, setAnalyticsAdminFlag } from "@/lib/analytics";
+import { setAnalyticsAdminFlag } from "@/lib/analytics";
 import { ImageFallback } from "@/components/ImageFallback";
 import { ScrollToTop } from "@/components/ui/ScrollToTop";
 import { FloatingSettingsFab } from "@/components/ui/FloatingSettingsFab";
