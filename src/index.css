@@ -3,6 +3,7 @@
 @import "shadcn/tailwind.css";
 @plugin "@tailwindcss/typography";
 @import "@fontsource-variable/geist";
+@import "tippy.js/dist/tippy.css";
 @import "@fontsource/playfair-display/400.css";
 @import "@fontsource/playfair-display/700.css";
 @import "@fontsource/playfair-display/900.css";
@@ -409,4 +410,67 @@ html {
 .group:hover > .node-drag-handle,
 .group\/block:hover > .node-drag-handle {
   opacity: 1;
+}
+/* ==== Tippy.js transparent theme (slash menu host) ==== */
+.tippy-box[data-theme~='transparent'] {
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+}
+.tippy-box[data-theme~='transparent'] > .tippy-content {
+  padding: 0;
+}
+.tippy-box[data-theme~='transparent'] > .tippy-arrow {
+  display: none;
+}
+
+/* ==== Notion-style tables inside the editor ==== */
+.ProseMirror table.prose-table,
+.ProseMirror table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 1rem 0;
+  overflow: hidden;
+}
+.ProseMirror table th,
+.ProseMirror table td {
+  border: 1px solid hsl(var(--border));
+  padding: 0.5rem 0.75rem;
+  vertical-align: top;
+  position: relative;
+  min-width: 80px;
+}
+.ProseMirror table th {
+  background: hsl(var(--muted) / 0.6);
+  font-weight: 600;
+  text-align: left;
+}
+.ProseMirror table .selectedCell:after {
+  background: hsl(var(--primary) / 0.15);
+  content: '';
+  inset: 0;
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+}
+.ProseMirror .column-resize-handle {
+  background: hsl(var(--primary));
+  bottom: -2px;
+  position: absolute;
+  right: -2px;
+  pointer-events: none;
+  top: 0;
+  width: 3px;
+}
+.ProseMirror.resize-cursor { cursor: col-resize; }
+
+/* Empty paragraph placeholder for slash hint */
+.ProseMirror p.is-editor-empty:first-child::before,
+.ProseMirror p.is-empty::before {
+  color: hsl(var(--muted-foreground));
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
 }

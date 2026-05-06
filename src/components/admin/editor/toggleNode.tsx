@@ -25,6 +25,15 @@ import { ChevronRight, GripVertical } from 'lucide-react';
 const ToggleView = React.memo(function ToggleView({ node, updateAttributes }: NodeViewProps) {
   const open = node.attrs.open !== false;
 
+  // CRITICAL: ProseMirror intercepts mousedown on draggable NodeViews to start
+  // a drag/selection. We must short-circuit it BEFORE click bubbles, otherwise
+  // the chevron looks "dead" inside the editor.
+  const toggle = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    updateAttributes({ open: !node.attrs.open });
+  };
+
   return (
     <NodeViewWrapper
       as="div"
@@ -34,8 +43,9 @@ const ToggleView = React.memo(function ToggleView({ node, updateAttributes }: No
     >
       <div
         contentEditable={false}
+        draggable
         data-drag-handle
-        className="node-drag-handle mt-[0.35rem] shrink-0 w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="node-drag-handle mt-[0.35rem] shrink-0 w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground cursor-grab active:cursor-grabbing"
         aria-label="Drag to reorder"
       >
         <GripVertical className="w-3.5 h-3.5" />
@@ -44,8 +54,10 @@ const ToggleView = React.memo(function ToggleView({ node, updateAttributes }: No
         <button
           type="button"
           contentEditable={false}
-          onClick={() => updateAttributes({ open: !open })}
-          className="mt-[0.35rem] shrink-0 w-5 h-5 inline-flex items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          // preventDefault on mousedown stops PM from claiming the event
+          onMouseDown={toggle}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          className="mt-[0.35rem] shrink-0 w-5 h-5 inline-flex items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
           aria-label={open ? 'Tutup toggle' : 'Buka toggle'}
           aria-expanded={open}
         >
@@ -53,10 +65,13 @@ const ToggleView = React.memo(function ToggleView({ node, updateAttributes }: No
             className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
           />
         </button>
+        {/* ALWAYS mount NodeViewContent — never unmount, just hide. Unmounting
+            destroys the AST children and breaks ProseMirror selection. */}
         <NodeViewContent
+          data-toggle-open={open ? 'true' : 'false'}
           className={
-            'toggle-content flex-1 min-w-0 pl-1 ' +
-            (open ? '' : '[&>*:not(:first-child)]:hidden')
+            'toggle-content flex-1 min-w-0 pl-1 [&>*:first-child]:!block ' +
+            (open ? 'block' : '[&>*:not(:first-child)]:hidden')
           }
         />
       </div>
