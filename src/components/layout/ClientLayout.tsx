@@ -11,7 +11,7 @@ import {
 import { useAuthQuery, useAppDataQuery } from "@/hooks/useAppQueries";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { apiFetch, removeLocalToken } from "@/lib/api";
-import { trackEvent, setAnalyticsAdminFlag } from "@/lib/analytics";
+import { setAnalyticsAdminFlag } from "@/lib/analytics";
 import { ImageFallback } from "@/components/ImageFallback";
 import { ScrollToTop } from "@/components/ui/ScrollToTop";
 import { FloatingSettingsFab } from "@/components/ui/FloatingSettingsFab";
@@ -142,8 +142,8 @@ function AppContent({ children }: { children: React.ReactNode }) {
     window.addEventListener("auth-expired", handleAuthExpired);
 
     setAnalyticsAdminFlag(isAdmin);
-    apiFetch("/api/track-visit", { method: "POST" }).catch(() => {});
-    trackEvent("page_view");
+    // GA4 now handles page views and unique visitor tracking.
+    // Only keep admin flag for internal analytics events.
 
     return () => window.removeEventListener("auth-expired", handleAuthExpired);
   }, [isAdmin, queryClient, router]);

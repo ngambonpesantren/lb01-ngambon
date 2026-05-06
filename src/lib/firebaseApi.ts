@@ -571,6 +571,7 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
     if (path === "/api/track-article" && method === "POST") {
       const today = new Date().toISOString().split("T")[0];
       const postId = body?.postId;
+      const slug = body?.slug;
       
       // 1. increment global daily article reads
       const existingDaily = await connSelectQuery(conn, "page_views", `select=*&date=eq.${today}`).catch(() => []);
@@ -579,12 +580,18 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
       const unique_hits = existingDaily[0]?.unique_hits || 0;
       await connUpsertReturning(conn, "page_views", [{ date: today, hits, unique_hits, article_reads }], "date");
 
-      // 2. increment specific post's organic_views
-      if (postId) {
-        const existingPost = await connSelectQuery(conn, "posts", `id=eq.${postId}`).catch(()=>[]);
+      // 2. increment specific post's organic_views (lookup by slug OR id)
+      const lookupQuery = slug
+        ? `select=*&slug=eq.${slug}`
+        : postId
+          ? `select=*&id=eq.${postId}`
+          : null;
+
+      if (lookupQuery) {
+        const existingPost = await connSelectQuery(conn, "posts", lookupQuery).catch(()=>[]);
         if (existingPost && existingPost[0]) {
            const organic = (existingPost[0].organic_views || 0) + 1;
-           await connUpdate(conn, "posts", `id=eq.${postId}`, { organic_views: organic });
+           await connUpdate(conn, "posts", `id=eq.${existingPost[0].id}`, { organic_views: organic });
         }
       }
       return ok();
