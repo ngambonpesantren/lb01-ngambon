@@ -35,7 +35,7 @@ export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel }: Co
   if (isDesktop) {
     return (
       <AlertDialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
-        <AlertDialogContent className="sm:rounded-lg shadow-soft border-0 max-w-sm p-8 text-center sm:gap-6">
+        <AlertDialogContent className="sm:rounded-lg shadow-soft border-0 max-w-sm p-8 text-center sm:gap-6 z-[5000]">
           <AlertDialogHeader className="sm:text-center p-0 space-y-2">
             <AlertDialogTitle className="text-2xl font-black text-foreground">{title}</AlertDialogTitle>
             <AlertDialogDescription className="text-base text-muted-foreground">{message}</AlertDialogDescription>
@@ -58,7 +58,7 @@ export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel }: Co
 
   return (
     <Drawer open={isOpen} onOpenChange={(open) => !open && onCancel()}>
-      <DrawerContent className="rounded-t-[2rem] border-0 outline-none">
+      <DrawerContent className="rounded-t-[2rem] border-0 outline-none z-[5000]">
         <DrawerHeader className="text-left mt-2 px-6">
           <DrawerTitle className="text-2xl font-black text-foreground">{title}</DrawerTitle>
           <DrawerDescription className="text-base text-muted-foreground mt-2">{message}</DrawerDescription>
