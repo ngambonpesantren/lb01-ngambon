@@ -7,16 +7,18 @@ import {
   getFirestore,
 } from "firebase/firestore";
 
+// Phase 3: Firebase init driven strictly by .env variables.
 const firebaseConfig = {
-  apiKey: "AIzaSyBd7GSBo-TX1jq5owp0umA_LfORfqnYMZ0",
-  authDomain: "ngambonpesantren.firebaseapp.com",
-  projectId: "ngambonpesantren",
-  storageBucket: "ngambonpesantren.firebasestorage.app",
-  messagingSenderId: "910820220862",
-  appId: "1:910820220862:web:567e3698c39c0c574023ef",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "",
 };
 
-const DB_ID = "ngambonpesantren-db-firebase-01";
+// Database ID from env; NEVER fall back to the literal "(default)".
+const DB_ID = process.env.NEXT_PUBLIC_FIREBASE_FIRESTORE_DB_ID || "";
 
 // Initialize app once (HMR-safe)
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
