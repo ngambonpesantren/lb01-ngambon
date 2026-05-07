@@ -364,23 +364,10 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
 
     // ===== SETTINGS =====
     if (path === "/api/settings" && method === "GET") {
-      const rows = await connSelectQuery(
-        conn,
-        "settings",
-        "select=data&id=eq.appearance",
-      ).catch(() => []);
-      return ok(rows[0]?.data || {});
+      return ok(DEFAULT_APP_SETTINGS);
     }
     if (path === "/api/settings" && method === "PUT") {
-      const payload = body || {};
-      await connUpsertReturning(conn, "settings", [
-        { id: "appearance", data: payload },
-      ], "id");
-      logAction(
-        "Theme Applied",
-        "Admin applied new theme and branding settings",
-        "system",
-      );
+      console.log("[settings] PUT received (no-op, settings are hardcoded)", body);
       return ok();
     }
 
