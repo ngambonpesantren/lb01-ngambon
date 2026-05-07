@@ -561,31 +561,17 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
     }
 
     // ===== LOGS =====
-    if (path === "/api/logs" && method === "POST") { await connInsertReturning(conn, "activity_logs", [{ id: "log-"+Date.now(), timestamp: new Date().toISOString(), ...body }]).catch(()=>[]); return ok({success: true}); }
+    if (path === "/api/logs" && method === "POST") { console.log("[audit-log]", body); return ok({success: true}); }
     if (path === "/api/logs" && method === "GET") {
-      const rows = await connSelectQuery(
-        conn,
-        "activity_logs",
-        "select=*&order=timestamp.desc&limit=500",
-      ).catch(() => []);
-      return ok(rows);
+      return ok([]);
     }
 
     // ===== EVENTS =====
     if (path === "/api/events" && method === "GET") {
-      const rows = await connSelectQuery(
-        conn,
-        "app_events",
-        "select=*&order=created_at.desc&limit=500",
-      ).catch(() => []);
-      return ok(rows);
+      return ok([]);
     }
     if (path === "/api/events" && method === "POST") {
-      // Do NOT pass a custom string id — `app_events.id` is uuid with a
-      // gen_random_uuid() default. Strip any client-supplied id to let the
-      // database generate a valid UUID.
-      const { id: _ignored, ...eventBody } = (body ?? {}) as Record<string, unknown>;
-      await connInsertReturning(conn, "app_events", [eventBody]).catch(() => []);
+      // Phase 1: App events migrated to GA4 — no Firestore write.
       return ok({ success: true });
     }
 
