@@ -187,14 +187,8 @@ const logAction = async (
   details: string,
   type: "education" | "system",
 ) => {
-  try {
-    const conn = getActiveConnection();
-    await connInsertReturning(conn, "activity_logs", [
-      { action, details, type, timestamp: new Date().toISOString() },
-    ]);
-  } catch (e) {
-    console.warn("log failed", e);
-  }
+  // Phase 1: Migrated to GA4 / console — no more Firestore writes.
+  console.log(`[audit] ${type} | ${action} | ${details}`);
 };
 
 // --- Stats ---
