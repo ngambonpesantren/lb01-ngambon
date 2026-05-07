@@ -154,7 +154,8 @@ export function connectFirestore(connId: string, config: FirebaseConfig): Firest
     app = initializeApp(config, connId);
   }
   appCache.set(connId, app);
-  const databaseId = config.firestoreDatabaseId || config.databaseId || "(default)";
+  // Phase 3: Use the explicit DB id from config; never fall back to "(default)".
+  const databaseId = config.firestoreDatabaseId || config.databaseId || "";
   let db: Firestore;
   try {
     db = initializeFirestore(app, { experimentalForceLongPolling: true }, databaseId);
