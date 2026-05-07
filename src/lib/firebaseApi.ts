@@ -24,6 +24,18 @@ import { SEED_POSTS, SEED_CATEGORIES } from './seed/blogSeedData';
 const ADMIN_PASSWORD = "janki_app";
 const TOKEN_VALUE = "client-admin-token";
 
+// Phase 2: Hardcoded app settings — eliminates Firestore reads on every page load.
+const DEFAULT_APP_SETTINGS = {
+  primaryColor: { h: 144, s: 29, l: 20 },
+  accentColor: { h: 34, s: 62, l: 57 },
+  bgColor: { h: 79, s: 29, l: 92 },
+  textColor: { h: 144, s: 18, l: 15 },
+  appName: "Tiny Tree",
+  badgeTitle: "Bonsai Collection",
+  heroTitle: "Bonsai",
+  heroSubtitle: "The fascinating and amazing world of Bonsai.",
+};
+
 // --- Response helpers ---
 const ok = (body: any = { success: true }, status = 200): Response =>
   new Response(JSON.stringify(body), {
