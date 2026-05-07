@@ -535,35 +535,15 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
 
     // ===== TRACK VISIT =====
     if (path === "/api/track-visit" && method === "POST") {
-      const today = new Date().toISOString().split("T")[0];
-      const isUnique = !!body?.isUnique;
-      const existing = await connSelectQuery(
-        conn,
-        "page_views",
-        `select=*&date=eq.${today}`, // Get all fields
-      ).catch(() => []);
-      
-      const hits = (existing[0]?.hits || 0) + 1;
-      const unique_hits = (existing[0]?.unique_hits || 0) + (isUnique ? 1 : 0);
-      const article_reads = existing[0]?.article_reads || 0; // Preserve
-
-      await connUpsertReturning(conn, "page_views", [{ date: today, hits, unique_hits, article_reads }], "date");
+      // Phase 1: Visit tracking migrated to GA4 — no Firestore write.
       return ok();
     }
 
     if (path === "/api/track-article" && method === "POST") {
-      const today = new Date().toISOString().split("T")[0];
       const postId = body?.postId;
       const slug = body?.slug;
-      
-      // 1. increment global daily article reads
-      const existingDaily = await connSelectQuery(conn, "page_views", `select=*&date=eq.${today}`).catch(() => []);
-      const article_reads = (existingDaily[0]?.article_reads || 0) + 1;
-      const hits = existingDaily[0]?.hits || 0;
-      const unique_hits = existingDaily[0]?.unique_hits || 0;
-      await connUpsertReturning(conn, "page_views", [{ date: today, hits, unique_hits, article_reads }], "date");
 
-      // 2. increment specific post's organic_views (lookup by slug OR id)
+      // Keep per-post organic_views increment; daily page_views removed — GA4 handles it.
       const lookupQuery = slug
         ? `select=*&slug=eq.${slug}`
         : postId
