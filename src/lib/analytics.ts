@@ -1,32 +1,6 @@
-// Lightweight client-side analytics → app_events table.
-// Captures: page visits, leaderboard filter changes, profile opens, admin login.
-// Each browser gets a stable session_id stored in localStorage.
-
-import { apiFetch } from './api';
-
-const SESSION_KEY = "app_session_id";
-
-const getSessionId = (): string => {
-  if (typeof window === "undefined") return "ssr";
-  let id = localStorage.getItem(SESSION_KEY);
-  if (!id) {
-    id = `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-    localStorage.setItem(SESSION_KEY, id);
-  }
-  return id;
-};
-
-const detectDevice = (): "mobile" | "tablet" | "desktop" => {
-  if (typeof window === "undefined") return "desktop";
-  const ua = navigator.userAgent || "";
-  const w = window.innerWidth;
-  if (/iPad|Tablet/i.test(ua) || (w >= 600 && w <= 1024)) return "tablet";
-  if (/Mobi|Android|iPhone/i.test(ua) || w < 600) return "mobile";
-  return "desktop";
-};
-
-let cachedAdmin = false;
-export const setAnalyticsAdminFlag = (isAdmin: boolean) => { cachedAdmin = isAdmin; };
+// Phase 1: Analytics now routes through GA4 (window.gtag) instead of
+// Firestore app_events writes.  The same public API is kept so call-sites
+// don't need changes.
 
 export type AppEventType =
   | "page_view"
@@ -35,6 +9,8 @@ export type AppEventType =
   | "admin_login"
   | "admin_logout"
   | "admin_action";
+
+export const setAnalyticsAdminFlag = (_isAdmin: boolean) => { /* no-op */ };
 
 export interface TrackOptions {
   refId?: string;
@@ -47,21 +23,14 @@ export async function trackEvent(
   opts: TrackOptions = {},
 ): Promise<void> {
   try {
-    await apiFetch("/api/events", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        event_type: eventType,
-        path: typeof window !== "undefined" ? window.location.pathname + window.location.hash : null,
-        device: detectDevice(),
-        is_admin: opts.isAdmin ?? cachedAdmin,
-        session_id: getSessionId(),
-        ref_id: opts.refId ?? null,
-        metadata: opts.metadata ?? {},
-      })
-    });
+    if (typeof window !== "undefined" && typeof (window as any).gtag === "function") {
+      (window as any).gtag("event", eventType, {
+        page_path: window.location.pathname,
+        ref_id: opts.refId ?? undefined,
+        ...opts.metadata,
+      });
+    }
   } catch (e) {
-    // Never let analytics break UX.
     console.warn("trackEvent failed", e);
   }
 }
