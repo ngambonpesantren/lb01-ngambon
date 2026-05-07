@@ -216,11 +216,10 @@ const computeStats = async (range: string, from?: string | null, to?: string | n
     }
   }
 
-  const [studentsRes, catRes, goalsRes, viewsRes] = await Promise.all([
+  const [studentsRes, catRes, goalsRes] = await Promise.all([
     connSelect(conn, "students").catch(() => []),
     connSelect(conn, "categories").catch(() => []),
     connSelect(conn, "master_goals").catch(() => []),
-    connSelect(conn, "page_views").catch(() => []),
   ]);
 
   const masterPoints = new Map<string, number>();
@@ -248,19 +247,10 @@ const computeStats = async (range: string, from?: string | null, to?: string | n
     });
   });
 
-  let totalHits = 0;
-  let uniqueVisitors = 0;
-  let articleReads = 0;
-
-  (viewsRes || []).forEach((v: any) => {
-    if (!v.date) return;
-    const d = new Date(v.date);
-    if (d >= cutoff && (!endCutoff || d <= endCutoff)) {
-      totalHits += (v.hits || 0);
-      uniqueVisitors += (v.unique_hits || Math.ceil((v.hits || 0) * 0.3)); // mock if missing
-      articleReads += (v.article_reads || 0);
-    }
-  });
+  // Phase 1: Visitor/hit metrics now handled by GA4 — return zeros.
+  const totalHits = 0;
+  const uniqueVisitors = 0;
+  const articleReads = 0;
 
   const chartData = Object.keys(chartMap)
     .sort()
