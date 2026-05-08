@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Globe, EyeOff, Check, X, ShieldAlert, Loader2, ChevronDown } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '../../lib/api';
+import { BlogPostsAPI, AdminUsersAPI } from '@/hooks/queries';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -31,76 +30,30 @@ import {
 } from "@/components/ui/command"
 
 export function AdminBlogTab() {
-  const queryClient = useQueryClient();
   const { isSuperAdmin } = useAuthRole();
   const [isEditing, setIsEditing] = useState<Partial<Post> | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [bulkDeleteIds, setBulkDeleteIds] = useState<string[] | null>(null);
 
-  const { data: posts = [], isLoading } = useQuery<Post[]>({
-    queryKey: ['posts'],
-    queryFn: async () => {
-      const res = await apiFetch('/api/posts');
-      if (!res.ok) throw new Error('Failed to fetch posts');
-      return res.json();
-    }
-  });
-
-  const { data: adminUsers = [] } = useQuery<AdminUser[]>({
-    queryKey: ['admin-users'],
-    queryFn: async () => {
-      const res = await apiFetch('/api/admin_users');
-      if (!res.ok) throw new Error('Failed to fetch admins');
-      return res.json();
-    }
-  });
+  const { data: posts = [], isLoading } = BlogPostsAPI.useList();
+  const { data: adminUsers = [] } = AdminUsersAPI.useList();
 
   const existingCategories = useMemo(() => {
     const cats = new Set(posts.map(p => p.category).filter(Boolean));
     return Array.from(cats);
   }, [posts]);
 
+  const saveMutation = BlogPostsAPI.useUpsert();
+  const deleteMutation = BlogPostsAPI.useDelete();
 
-  const saveMutation = useMutation({
-    mutationFn: async (post: Partial<Post>) => {
-      const url = post.id ? `/api/posts/${post.id}` : '/api/posts';
-      const method = post.id ? 'PUT' : 'POST';
-      const res = await apiFetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(post)
-      });
-      if (!res.ok) throw new Error('Failed to save post');
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
-      setIsEditing(null);
-    }
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiFetch(`/api/posts/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete post');
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
-      setDeleteConfirmId(null);
-    }
-  });
-
-  const bulkDeleteMutation = useMutation({
-    mutationFn: async (ids: string[]) => {
-      await Promise.all(ids.map(id =>
-        apiFetch(`/api/posts/${id}`, { method: 'DELETE' }).catch(() => null)
-      ));
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
+  const handleBulkDelete = async (ids: string[]) => {
+    try {
+      await Promise.all(ids.map(id => deleteMutation.mutateAsync(id)));
       setBulkDeleteIds(null);
+    } catch (e: any) {
+      alert("Failed to delete some articles");
     }
-  });
+  };
 
   const columns = useMemo<ColumnDef<Post>[]>(() => [
     {
@@ -151,11 +104,13 @@ export function AdminBlogTab() {
               size="sm"
               className="h-6 w-6 p-0"
               title={isPub ? "Jadikan Draf" : "Terbitkan"}
-              onClick={() => {
-                 saveMutation.mutate({ 
+              onClick={async () => {
+                 await saveMutation.mutateAsync({ 
                    id: row.original.id, 
-                   status: isPub ? 'draft' : 'published',
-                   published_at: isPub ? row.original.published_at : new Date().toISOString()
+                   data: {
+                     status: isPub ? 'draft' : 'published',
+                     published_at: isPub ? row.original.published_at : new Date().toISOString()
+                   }
                  });
               }}
             >
@@ -447,7 +402,7 @@ export function AdminBlogTab() {
 
             <Button 
               className="w-full rounded-xl py-6 font-bold shadow-primary-glow mt-6" 
-              onClick={() => {
+              onClick={async () => {
                 let generatedSlug = isEditing.slug;
                 if (!generatedSlug && isEditing.title) {
                   generatedSlug = isEditing.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
@@ -464,14 +419,18 @@ export function AdminBlogTab() {
                 let finalMetaTitle = isEditing.meta_title || isEditing.title;
                 let finalMetaDesc = isEditing.meta_description || generatedExcerpt;
 
-                saveMutation.mutate({ 
-                  ...isEditing, 
-                  slug: generatedSlug,
-                  excerpt: generatedExcerpt,
-                  meta_title: finalMetaTitle,
-                  meta_description: finalMetaDesc,
-                  published_at: isEditing.status === 'published' && !isEditing.published_at ? new Date().toISOString() : isEditing.published_at 
+                await saveMutation.mutateAsync({ 
+                  id: isEditing.id,
+                  data: {
+                    ...isEditing, 
+                    slug: generatedSlug,
+                    excerpt: generatedExcerpt,
+                    meta_title: finalMetaTitle,
+                    meta_description: finalMetaDesc,
+                    published_at: isEditing.status === 'published' && !isEditing.published_at ? new Date().toISOString() : isEditing.published_at 
+                  }
                 });
+                setIsEditing(null);
               }}
               disabled={saveMutation.isPending || !isEditing.title}
             >
@@ -507,7 +466,12 @@ export function AdminBlogTab() {
         isOpen={!!deleteConfirmId}
         title="Konfirmasi Hapus Artikel"
         message="Apakah Anda yakin ingin menghapus artikel ini? Tindakan ini tidak dapat diurungkan."
-        onConfirm={() => deleteConfirmId && deleteMutation.mutate(deleteConfirmId)}
+        onConfirm={async () => {
+          if (deleteConfirmId) {
+            await deleteMutation.mutateAsync(deleteConfirmId);
+            setDeleteConfirmId(null);
+          }
+        }}
         onCancel={() => setDeleteConfirmId(null)}
       />
 
@@ -515,7 +479,7 @@ export function AdminBlogTab() {
         isOpen={!!bulkDeleteIds}
         title="Konfirmasi Hapus Massal"
         message={`Hapus ${bulkDeleteIds?.length ?? 0} artikel? Tindakan ini tidak dapat diurungkan.`}
-        onConfirm={() => bulkDeleteIds && bulkDeleteMutation.mutate(bulkDeleteIds)}
+        onConfirm={() => bulkDeleteIds && handleBulkDelete(bulkDeleteIds)}
         onCancel={() => setBulkDeleteIds(null)}
       />
     </div>

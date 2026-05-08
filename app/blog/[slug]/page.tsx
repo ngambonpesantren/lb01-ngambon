@@ -1,6 +1,9 @@
 import { Metadata } from 'next';
 import { BlogPostPage } from '@/components/pages/BlogPostPage';
 
+// Phase D: ISR — revalidate blog posts every 10 minutes.
+export const revalidate = 600;
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   return {

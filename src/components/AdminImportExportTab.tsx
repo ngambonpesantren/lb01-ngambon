@@ -13,10 +13,15 @@ import { toCSV, downloadCSV, parseCSV } from "../lib/csv";
 import { z } from "zod";
 import { toast } from "sonner";
 import { writeBatch, doc, collection, getDocs } from "firebase/firestore";
-import { getActiveConnection } from "../lib/dbConnections";
-import { connectFirestore, parseFirebaseConfig } from "../lib/firestoreDriver";
-
-type ApiFetch = (url: string, init?: RequestInit) => Promise<Response>;
+import { db } from "@/lib/firebase/firebase";
+import { 
+  blogPostsCol, 
+  activityLogsCol, 
+  studentsCol, 
+  categoriesCol, 
+  goalsCol 
+} from "@/lib/firebase/collections";
+import { listAll, upsert } from "@/lib/firebase/queries";
 
 const SnapshotSchema = z
   .object({
@@ -38,7 +43,6 @@ const SnapshotSchema = z
   .catchall(z.any());
 
 interface Props {
-  apiFetch: ApiFetch;
   students: any[];
   masterGoals: any[];
   categories: any[];
@@ -63,7 +67,6 @@ type ImportType =
 const today = () => new Date().toISOString().split("T")[0];
 
 export function AdminImportExportTab({
-  apiFetch,
   students,
   masterGoals,
   categories,
@@ -104,19 +107,12 @@ export function AdminImportExportTab({
   const handleFullSnapshotJSONExport = async () => {
     setBusy("full_json");
     try {
-      // Fetch via API where possible
-      const [postsRes, logsRes] = await Promise.all([
-        apiFetch("/api/posts"),
-        apiFetch("/api/logs"),
+      const [posts, logs] = await Promise.all([
+        listAll(blogPostsCol),
+        listAll(activityLogsCol),
       ]);
-      const posts = postsRes.ok ? await postsRes.json() : [];
-      const logs = logsRes.ok ? await logsRes.json() : [];
 
-      // Pull relational/historical collections directly from Firestore so we
-      // can keep the original document IDs (foreign-keys) intact.
-      const conn = getActiveConnection();
-      const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
-      const db = connectFirestore(conn.id, cfg);
+      const db = studentsCol.firestore;
 
       const RELATIONAL = [
         "tracks",
@@ -147,7 +143,6 @@ export function AdminImportExportTab({
         metadata: {
           generated_at: new Date().toISOString(),
           version: "2.0-relational",
-          source_connection: conn.id,
         },
         students: withId(students),
         masterGoals: withId(masterGoals),
@@ -252,33 +247,11 @@ export function AdminImportExportTab({
           "completed_at",
         ]);
       } else if (key === "stats_overview" || key === "stats_chart") {
-        const res = await apiFetch(`/api/stats?range=${statsRange}`);
-        if (!res.ok) throw new Error("Failed to fetch stats");
-        const stats = await res.json();
-        if (key === "stats_overview") {
-          const rows = [
-            {
-              range: statsRange,
-              generated_at: new Date().toISOString(),
-              total_students: stats.totalStudents,
-              total_active_goals: stats.totalActiveGoals,
-              total_categories: stats.totalCategories,
-              completed_goals: stats.completedGoals,
-              total_points: stats.totalPoints,
-              unique_visitors: stats.uniqueVisitors,
-            },
-          ];
-          csv = toCSV(rows);
-          filename = `stats_overview_${statsRange}_${today()}.csv`;
-        } else {
-          csv = toCSV(stats.chartData || [], ["date", "points"]);
-          filename = `stats_points_trend_${statsRange}_${today()}.csv`;
-        }
+        alert("Pengeksporan statistik untuk sementara dinonaktifkan dalam mode koneksi langsung ke Firestore.");
+        return;
       } else if (key === "logs") {
-        const res = await apiFetch("/api/logs");
-        if (!res.ok) throw new Error("Failed to fetch logs");
-        const logs = await res.json();
-        csv = toCSV(logs || [], [
+        const logs = await listAll<any>(activityLogsCol);
+        csv = toCSV((logs as any[]) || [], [
           "timestamp",
           "type",
           "action",
@@ -303,10 +276,6 @@ export function AdminImportExportTab({
   const importFullSnapshot = async (
     validatedData: z.infer<typeof SnapshotSchema>,
   ) => {
-    const conn = getActiveConnection();
-    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
-    const db = connectFirestore(conn.id, cfg);
-
     // Map JSON section → Firestore collection name. The keys mirror what the
     // export writes; values are the destination collections.
     const SECTION_TO_COLLECTION: Record<string, string> = {
@@ -506,13 +475,10 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
                   .filter(Boolean);
             }
           }
-          const res = await apiFetch("/api/students", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          if (res.ok) inserted++;
-          else {
+          try {
+            await upsert(studentsCol, crypto.randomUUID(), payload);
+            inserted++;
+          } catch (e: any) {
             failed++;
             errors.push(`Row "${name}" failed`);
           }
@@ -543,11 +509,7 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
           );
           for (const [slug, name] of uniqueNames.entries()) {
             if (existing.has(slug)) continue;
-            await apiFetch("/api/categories", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id: slug, name }),
-            }).catch(() => {});
+            await upsert<any>(categoriesCol, slug, { name }).catch(() => {});
           }
         }
         // ---- Insert Goals (linked by categoryName as natural FK). ----
@@ -563,13 +525,10 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
             if (catNameCol && row[catNameCol])
               payload.categoryName = (row[catNameCol] || "").trim();
           }
-          const res = await apiFetch("/api/masterGoals", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          if (res.ok) inserted++;
-          else {
+          try {
+            await upsert(goalsCol, crypto.randomUUID(), payload);
+            inserted++;
+          } catch (e: any) {
             failed++;
             errors.push(`Row "${title}" failed`);
           }
@@ -580,13 +539,10 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
         for (const row of previewRows) {
           const name = (row[nameCol] || "").trim();
           if (!name) continue;
-          const res = await apiFetch("/api/categories", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name }),
-          });
-          if (res.ok) inserted++;
-          else {
+          try {
+            await upsert<any>(categoriesCol, crypto.randomUUID(), { name });
+            inserted++;
+          } catch (e: any) {
             failed++;
             errors.push(`Row "${name}" failed`);
           }
@@ -595,15 +551,11 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
 
       // Log activity
       try {
-        await apiFetch("/api/logs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "CSV Import",
-            details: `Imported ${inserted} ${importType} rows (${failed} failed)`,
-            type: "system",
-            timestamp: new Date().toISOString(),
-          }),
+        await upsert<any>(activityLogsCol, crypto.randomUUID(), {
+          action: "CSV Import",
+          details: `Imported ${inserted} ${importType} rows (${failed} failed)`,
+          type: "system",
+          timestamp: new Date().toISOString(),
         });
       } catch {}
 
@@ -834,14 +786,8 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
                     setBusy('seeding');
                     const toastId = toast.loading('Sedang melakukan seeding data...');
                     try {
-                      const res = await apiFetch('/api/seeding', { method: 'POST' });
-                      if(res.ok) {
-                        toast.success("Seeding berhasil dilakukan!", { id: toastId });
-                        refreshData();
-                      } else {
-                        const errData = await res.json().catch(() => ({}));
-                        throw new Error(errData.error || errData.message || 'Gagal seeding. Periksa konfigurasi Firestore Anda.');
-                      }
+                      alert("Penyemaian data awal (seeding) tidak didukung pada mode langsung ini.");
+                      toast.dismiss(toastId);
                     } catch(e: any) {
                       toast.error(e.message || 'Gagal melakukan seeding', { id: toastId, duration: 8000 });
                     } finally {

@@ -10,7 +10,7 @@ import {
 } from "@/components/admin/AdminAppearanceTab";
 import { useAuthQuery, useAppDataQuery } from "@/hooks/useAppQueries";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
-import { apiFetch, removeLocalToken } from "@/lib/api";
+import { removeLocalToken } from "@/lib/auth";
 import { setAnalyticsAdminFlag } from "@/lib/analytics";
 import { ImageFallback } from "@/components/ImageFallback";
 import { ScrollToTop } from "@/components/ui/ScrollToTop";
@@ -39,6 +39,12 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
+
+  // Phase 2: Defer Firebase-dependent rendering until after client mount to
+  // eliminate SSR hydration mismatch (server has no Firebase access; client
+  // resolves auth/data asynchronously).
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => { setIsMounted(true); }, []);
 
   const { data: authData, isLoading: isAuthLoading } = useAuthQuery();
   const { data: appData, isLoading: isAppDataLoading } = useAppDataQuery();
@@ -164,6 +170,11 @@ function AppContent({ children }: { children: React.ReactNode }) {
       clearTimeout(t);
     };
   }, [refreshData]);
+
+  // Phase 2: SSR returns null to guarantee no hydration mismatch. The first
+  // client paint also returns null, then mounts the real tree on the next
+  // commit. Loader is only shown after mount while data is loading.
+  if (!isMounted) return null;
 
   if (isAuthLoading || isLoading) {
     return (

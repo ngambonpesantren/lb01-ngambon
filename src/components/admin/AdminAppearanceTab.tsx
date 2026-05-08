@@ -12,7 +12,8 @@ import {
   Loader2,
 } from "lucide-react";
 import Cropper from "react-easy-crop";
-import { apiFetch } from "../../lib/api";
+import { setDoc } from "firebase/firestore";
+import { settingsDoc } from "@/lib/firebase/collections";
 import ImageFallback from "../ImageFallback";
 
 type HSLColor = { h: number; s: number; l: number };
@@ -305,23 +306,15 @@ export function AdminAppearanceTab({
     setSaving(true);
     setSuccessMsg("");
     try {
-      const res = await apiFetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings || {}),
-      });
-      if (res.ok) {
-        setSuccessMsg("Appearance settings and themes applied successfully!");
-        if (refreshData) {
-          refreshData();
-        }
-        if (setAppSettings) {
-          setAppSettings();
-        }
-        setTimeout(() => setSuccessMsg(""), 5000);
-      } else {
-        alert("Failed to save settings.");
+      await setDoc(settingsDoc, settings || {}, { merge: true });
+      setSuccessMsg("Appearance settings and themes applied successfully!");
+      if (refreshData) {
+        refreshData();
       }
+      if (setAppSettings) {
+        setAppSettings();
+      }
+      setTimeout(() => setSuccessMsg(""), 5000);
     } catch (err) {
       console.error(err);
       alert("Error updating settings.");

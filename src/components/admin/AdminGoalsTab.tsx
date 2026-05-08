@@ -11,7 +11,7 @@ import {
   FolderTree,
   Layers,
 } from "lucide-react";
-import { apiFetch } from "../../lib/api";
+import { GroupsAPI, CategoriesAPI, GoalsAPI } from "@/hooks/queries";
 import { motion, AnimatePresence } from "motion/react";
 import { ConfirmModal } from "../ui/ConfirmModal";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -23,7 +23,6 @@ import type { Category, MasterGoal, Group } from "../../lib/types";
 import {
   buildHierarchy,
   moveItem,
-  persistReorder,
   sortByOrder,
   FALLBACK_GROUP_ID,
   FALLBACK_CATEGORY_ID,
@@ -97,112 +96,116 @@ export function AdminGoalsTab({
   const toggleCat = (id: string) =>
     setExpandedCats((p) => ({ ...p, [id]: p[id] === undefined ? false : !p[id] }));
 
+  // ---- MUTATIONS ---------------------------------------------------------
+  const upsertGroup = GroupsAPI.useUpsert();
+  const deleteGroup = GroupsAPI.useDelete();
+
+  const upsertCategory = CategoriesAPI.useUpsert();
+  const deleteCategory = CategoriesAPI.useDelete();
+
+  const upsertGoal = GoalsAPI.useUpsert();
+  const deleteGoal = GoalsAPI.useDelete();
+
+  const bulkGroup = GroupsAPI.useBulk();
+  const bulkCategory = CategoriesAPI.useBulk();
+  const bulkGoal = GoalsAPI.useBulk();
+
   // ---- GROUP CRUD --------------------------------------------------------
   const addGroup = async () => {
     const name = newGroupName.trim();
     if (!name) return;
-    const order = (sortByOrder(groups).slice(-1)[0]?.order ?? -1) + 1;
-    const res = await apiFetch("/api/groups", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, order }),
-    });
-    if (!res.ok) alert(`Gagal membuat grup: ${res.statusText}`);
-    else {
+    try {
+      const order = (sortByOrder(groups).slice(-1)[0]?.order ?? -1) + 1;
+      await upsertGroup.mutateAsync({ data: { name, order } });
       setNewGroupName("");
       refreshData();
+    } catch (e: any) {
+      alert(`Gagal membuat grup: ${e.message}`);
     }
   };
 
   const saveGroup = async (g: Group) => {
-    const url = g.id ? `/api/groups/${g.id}` : "/api/groups";
-    const method = g.id ? "PUT" : "POST";
-    const res = await apiFetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(g),
-    });
-    if (!res.ok) alert(`Gagal menyimpan grup: ${res.statusText}`);
-    else {
+    try {
+      await upsertGroup.mutateAsync({ id: g.id || undefined, data: g });
       setGroupModalOpen(false);
       setEditGroupData(null);
       refreshData();
+    } catch (e: any) {
+      alert(`Gagal menyimpan grup: ${e.message}`);
     }
   };
 
   const executeDeleteGroup = async () => {
     if (!deleteGroupConfirm) return;
-    const res = await apiFetch(`/api/groups/${deleteGroupConfirm.id}`, { method: "DELETE" });
-    if (!res.ok) alert(`Gagal menghapus: ${res.statusText}`);
-    setDeleteGroupConfirm(null);
-    refreshData();
+    try {
+      await deleteGroup.mutateAsync(deleteGroupConfirm.id);
+      setDeleteGroupConfirm(null);
+      refreshData();
+    } catch (e: any) {
+      alert(`Gagal menghapus: ${e.message}`);
+    }
   };
 
   // ---- CATEGORY CRUD -----------------------------------------------------
   const addCategoryToGroup = async (groupId: string) => {
     const name = (catDraftByGroup[groupId] || "").trim();
     if (!name) return;
-    const siblings = categories.filter((c) => (c.groupId || FALLBACK_GROUP_ID) === groupId);
-    const order = (sortByOrder(siblings).slice(-1)[0]?.order ?? -1) + 1;
-    const body: any = { name, order };
-    if (groupId !== FALLBACK_GROUP_ID) body.groupId = groupId;
-    const res = await apiFetch("/api/categories", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) alert(`Gagal membuat kategori: ${res.statusText}`);
-    else {
+    try {
+      const siblings = categories.filter((c) => (c.groupId || FALLBACK_GROUP_ID) === groupId);
+      const order = (sortByOrder(siblings).slice(-1)[0]?.order ?? -1) + 1;
+      const body: any = { name, order };
+      if (groupId !== FALLBACK_GROUP_ID) body.groupId = groupId;
+      await upsertCategory.mutateAsync({ data: body });
       setCatDraftByGroup((p) => ({ ...p, [groupId]: "" }));
       refreshData();
+    } catch (e: any) {
+      alert(`Gagal membuat kategori: ${e.message}`);
     }
   };
 
   const updateCategory = async () => {
     if (!editCatName.trim() || !editCatData) return;
-    const res = await apiFetch(`/api/categories/${editCatData.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...editCatData, name: editCatName }),
-    });
-    if (!res.ok) alert(`Gagal memperbarui: ${res.statusText}`);
-    else {
+    try {
+      await upsertCategory.mutateAsync({ id: editCatData.id, data: { ...editCatData, name: editCatName } });
       setEditCatData(null);
       setEditCatName("");
       refreshData();
+    } catch (e: any) {
+      alert(`Gagal memperbarui: ${e.message}`);
     }
   };
 
   const executeDeleteCategory = async () => {
     if (!deleteCatConfirm) return;
-    const res = await apiFetch(`/api/categories/${deleteCatConfirm.id}`, { method: "DELETE" });
-    if (!res.ok) alert(`Gagal menghapus: ${res.statusText}`);
-    setDeleteCatConfirm(null);
-    refreshData();
+    try {
+      await deleteCategory.mutateAsync(deleteCatConfirm.id);
+      setDeleteCatConfirm(null);
+      refreshData();
+    } catch (e: any) {
+      alert(`Gagal menghapus: ${e.message}`);
+    }
   };
 
   // ---- GOAL CRUD ---------------------------------------------------------
   const handleSaveGoal = async (formData: MasterGoal) => {
-    const isNew = !formData.id;
-    const url = isNew ? "/api/masterGoals" : `/api/masterGoals/${formData.id}`;
-    const res = await apiFetch(url, {
-      method: isNew ? "POST" : "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
-    });
-    if (!res.ok) alert(`Gagal menyimpan: ${res.statusText}`);
-    else {
+    try {
+      await upsertGoal.mutateAsync({ id: formData.id || undefined, data: formData });
       refreshData();
       setGoalModalOpen(false);
+    } catch (e: any) {
+      alert(`Gagal menyimpan: ${e.message}`);
     }
   };
 
   const executeDeleteGoal = async () => {
     if (!deleteGoalConfirm) return;
-    const res = await apiFetch(`/api/masterGoals/${deleteGoalConfirm.id}`, { method: "DELETE" });
-    if (!res.ok) alert(`Gagal menghapus: ${res.statusText}`);
-    setDeleteGoalConfirm(null);
-    refreshData();
+    try {
+      await deleteGoal.mutateAsync(deleteGoalConfirm.id);
+      setDeleteGoalConfirm(null);
+      refreshData();
+    } catch (e: any) {
+      alert(`Gagal menghapus: ${e.message}`);
+    }
   };
 
   // ---- REORDER (▲▼ buttons) --------------------------------------------
@@ -210,7 +213,7 @@ export function AdminGoalsTab({
     const ordered = moveItem(sortByOrder(groups), id, dir);
     if (ordered === groups) return;
     try {
-      await persistReorder("/api/groups/reorder", ordered);
+      await bulkGroup.mutateAsync({ rows: ordered.map((o, i) => ({ ...o, order: i })) });
     } finally {
       refreshData();
     }
@@ -222,7 +225,7 @@ export function AdminGoalsTab({
     const ordered = moveItem(siblings, id, dir);
     if (ordered === siblings) return;
     try {
-      await persistReorder("/api/categories/reorder", ordered, { groupId });
+      await bulkCategory.mutateAsync({ rows: ordered.map((o, i) => ({ ...o, order: i })) });
     } finally {
       refreshData();
     }
@@ -240,7 +243,7 @@ export function AdminGoalsTab({
     const ordered = moveItem(siblings, id, dir);
     if (ordered === siblings) return;
     try {
-      await persistReorder("/api/masterGoals/reorder", ordered, { categoryId });
+      await bulkGoal.mutateAsync({ rows: ordered.map((o, i) => ({ ...o, order: i })) });
     } finally {
       refreshData();
     }
@@ -249,21 +252,21 @@ export function AdminGoalsTab({
   // ---- DnD persistence (full ordered list) -------------------------------
   const persistGroupOrder = async (next: { id: string }[]) => {
     try {
-      await persistReorder("/api/groups/reorder", next);
+      await bulkGroup.mutateAsync({ rows: next.map((n, i) => ({ id: n.id, order: i } as any)) });
     } finally {
       refreshData();
     }
   };
   const persistCategoryOrder = async (groupId: string, next: { id: string }[]) => {
     try {
-      await persistReorder("/api/categories/reorder", next, { groupId });
+      await bulkCategory.mutateAsync({ rows: next.map((n, i) => ({ id: n.id, order: i } as any)) });
     } finally {
       refreshData();
     }
   };
   const persistGoalOrder = async (categoryId: string, next: { id: string }[]) => {
     try {
-      await persistReorder("/api/masterGoals/reorder", next, { categoryId });
+      await bulkGoal.mutateAsync({ rows: next.map((n, i) => ({ id: n.id, order: i } as any)) });
     } finally {
       refreshData();
     }
@@ -330,10 +333,9 @@ export function AdminGoalsTab({
           const srcGroupId = cat.groupId || FALLBACK_GROUP_ID;
           // Update category's groupId
           try {
-            await apiFetch(`/api/categories/${catId}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ ...cat, groupId: destGroupId === FALLBACK_GROUP_ID ? null : destGroupId }),
+            await upsertCategory.mutateAsync({
+              id: catId,
+              data: { ...cat, groupId: destGroupId === FALLBACK_GROUP_ID ? undefined : destGroupId },
             });
           } catch (e) {
             console.warn("move category failed", e);

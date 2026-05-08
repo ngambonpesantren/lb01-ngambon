@@ -21,7 +21,9 @@ import {
   HardDrive,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { apiFetch, removeLocalToken } from "../../lib/api";
+import { removeLocalToken } from "../../lib/auth";
+import { auth } from "../../lib/firebase/firebase";
+import { signOut } from "firebase/auth";
 import { trackEvent } from "../../lib/analytics";
 import { AdminStudentsTab } from "./AdminStudentsTab";
 import { AdminGoalsTab } from "./AdminGoalsTab";
@@ -98,7 +100,7 @@ export function AdminDashboard({
 
           <button
             onClick={async () => {
-              await apiFetch("/api/logout", { method: "POST" });
+              try { await signOut(auth); } catch(e){}
               removeLocalToken();
               queryClient.setQueryData(["auth"], { authenticated: false });
               trackEvent("admin_logout", { isAdmin: true });
@@ -220,7 +222,6 @@ export function AdminDashboard({
           {activeTab === "statistics" && <AdminStatisticsTab />}
           {activeTab === "import-export" && (
             <AdminImportExportTab
-              apiFetch={apiFetch}
               students={students}
               masterGoals={masterGoals}
               categories={categories}

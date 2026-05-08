@@ -1,10 +1,7 @@
-"use client";
+import { CategoryIndexPage } from "@/components/pages/CategoryIndexPage";
 
-import dynamic from "next/dynamic";
-const CategoryIndexPage = dynamic(
-  () => import("@/components/pages/CategoryIndexPage").then((m) => m.CategoryIndexPage),
-  { ssr: false }
-);
+// Phase D: ISR — revalidate category index every 10 minutes.
+export const revalidate = 600;
 
 export default function Page() {
   return <CategoryIndexPage />;

@@ -1,21 +1,28 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ColumnDef } from '@tanstack/react-table';
-import { apiFetch } from '../../lib/api';
 import { DataTable } from '@/components/ui/DataTable';
 import { PopoverSelect } from '@/components/ui/PopoverSelect';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { Database, Loader2 } from 'lucide-react';
+import { 
+  studentsCol, 
+  goalsCol, 
+  categoriesCol, 
+  blogPostsCol, 
+  activityLogsCol 
+} from '@/lib/firebase/collections';
+import { listAll, remove } from '@/lib/firebase/queries';
 
 type CollectionKey = 'students' | 'masterGoals' | 'categories' | 'posts' | 'logs';
 
-const COLLECTIONS: { key: CollectionKey; label: string; endpoint: string; filterCol: string }[] = [
-  { key: 'students',    label: 'Students',   endpoint: '/api/students',    filterCol: 'name' },
-  { key: 'masterGoals', label: 'Goals',      endpoint: '/api/masterGoals', filterCol: 'title' },
-  { key: 'categories',  label: 'Categories', endpoint: '/api/categories',  filterCol: 'name' },
-  { key: 'posts',       label: 'Posts',      endpoint: '/api/posts',       filterCol: 'title' },
-  { key: 'logs',        label: 'Logs',       endpoint: '/api/logs',        filterCol: 'action' },
+const COLLECTIONS: { key: CollectionKey; label: string; ref: any; filterCol: string }[] = [
+  { key: 'students',    label: 'Students',   ref: studentsCol,    filterCol: 'name' },
+  { key: 'masterGoals', label: 'Goals',      ref: goalsCol, filterCol: 'title' },
+  { key: 'categories',  label: 'Categories', ref: categoriesCol,  filterCol: 'name' },
+  { key: 'posts',       label: 'Posts',      ref: blogPostsCol,       filterCol: 'title' },
+  { key: 'logs',        label: 'Logs',       ref: activityLogsCol,        filterCol: 'action' },
 ];
 
 function buildColumns(rows: any[], filterCol: string): ColumnDef<any>[] {
@@ -65,12 +72,9 @@ export function AdminDatabaseTab() {
   const [busy, setBusy] = useState(false);
 
   const { data = [], isLoading } = useQuery<any[]>({
-    queryKey: ['db-browser', meta.endpoint],
+    queryKey: ['db-browser', meta.key],
     queryFn: async () => {
-      const res = await apiFetch(meta.endpoint);
-      if (!res.ok) throw new Error(`Failed to load ${meta.label}`);
-      const json = await res.json();
-      return Array.isArray(json) ? json : (json.items || json.data || []);
+      return await listAll(meta.ref);
     },
   });
 
@@ -81,9 +85,9 @@ export function AdminDatabaseTab() {
     setBusy(true);
     try {
       await Promise.all(bulkDeleteIds.map(id =>
-        apiFetch(`${meta.endpoint}/${id}`, { method: 'DELETE' }).catch(() => null)
+        remove(meta.ref, id).catch(() => null)
       ));
-      await queryClient.invalidateQueries({ queryKey: ['db-browser', meta.endpoint] });
+      await queryClient.invalidateQueries({ queryKey: ['db-browser', meta.key] });
       await queryClient.invalidateQueries({ queryKey: ['app-data'] });
     } finally {
       setBusy(false);

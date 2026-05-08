@@ -3,6 +3,5 @@ node_modules/
 coverage/
 .DS_Store
 *.log
-
-# AI Studio Sandbox
-.ai-helpers/
+.env*
+!.env.example

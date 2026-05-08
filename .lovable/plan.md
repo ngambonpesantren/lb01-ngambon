@@ -1,95 +1,138 @@
+# Full Native Firebase Migration & CRUD Optimization
+
 ## Goal
-Refactor data model from 2-tier (Category → Goal) to 3-tier (Group → Category → Goal) with strict user-defined `order` on every level, and update all consuming UI surfaces.
+Eliminate the legacy `apiFetch` / `firebaseApi` / `dbConnections` / `db/adapter` proxy stack. Every consumer talks directly to Firestore via `firebase/firestore`, wrapped in TanStack Query, with public read pages converted to Next.js RSC + ISR.
 
-## 1. Schema (`src/lib/types.ts`)
+## Phase A — Firestore data access foundation
 
-```ts
-export interface Group {
-  id: string;
-  name: string;
-  order: number;
-  isSystem?: boolean;
-}
+Create two new files:
 
-export interface Category {
-  id: string;
-  name: string;
-  groupId: string;     // NEW: parent
-  order: number;       // NEW: manual sort
-}
+**`src/lib/firebase/collections.ts`** — typed collection refs with `withConverter<T>()`:
+- `studentsCol`, `goalsCol`, `categoriesCol`, `groupsCol`, `blogPostsCol`, `adminUsersCol`, `pageViewsCol`, `appEventsCol`, `activityLogsCol`
+- `settingsDoc` (doc ref to `settings/app`)
 
-export interface MasterGoal {
-  id: string;
-  categoryId: string;  // NEW: canonical FK (keep `categoryName` as denormalized read-only)
-  categoryName: string;
-  title: string;
-  points: number;
-  description: string;
-  order: number;       // NEW
-}
-```
+**`src/lib/firebase/queries.ts`** — composable helpers:
+- `listAll<T>(ref)` — full collection
+- `listPaged<T>(ref, {pageSize, cursor, orderField})` — cursor pagination, default `limit(100)`
+- `getById<T>(ref, id)` — `getDoc` with cache-first then network
+- `countOf(ref)` — uses `getCountFromServer`
+- `upsert(ref, id, data)` — `setDoc(..., {merge: true})`
+- `patch(ref, id, data)` — `updateDoc`
+- `remove(ref, id)` — `deleteDoc`
+- `bulkWrite(ref, rows, mode)` — chunked `writeBatch` (≤450 ops/batch)
 
-`AssignedGoal` and `StudentAchievement` are unchanged (they reference `goalId`).
+## Phase B — Domain hooks
 
-### Backwards compatibility
-- Read paths: when `categoryId`/`groupId`/`order` are absent, fallback to current `categoryName` lookup and synthesize `order = createdAt` index. This keeps the existing dataset rendering while migration runs.
-- A one-time migration helper (client-side, optional) assigns sequential `order` to existing Categories/Goals and creates a default Group `Umum` (`isSystem: true`) for orphans.
+`src/hooks/queries/` with one file per domain. Each exports `useXList`, `useX(id)`, `useCreateX`, `useUpdateX`, `useDeleteX`, `useBulkX`:
 
-## 2. API contract (Go backend — payload shape only)
+- `useStudents.ts`
+- `useGoals.ts`
+- `useCategories.ts`
+- `useGroups.ts`
+- `useBlogPosts.ts`
+- `useAdminUsers.ts`
+- `useAppSettings.ts`
+- `useAdminStats.ts`
+- `useAppEvents.ts`
 
-New REST endpoints (mirroring `/api/categories`):
+Conventions:
+- Query keys: `['students']`, `['students', id]`
+- `staleTime` 10 min, `gcTime` 24 h (already in `ReactQueryClientProvider`)
+- Mutations: optimistic via `setQueryData` + rollback in `onError`, then `invalidateQueries` in `onSettled`
+- `onSnapshot` only on admin live tiles; everywhere else `getDocs`
 
-- `GET/POST /api/groups`, `PUT/DELETE /api/groups/:id`
-- `POST /api/groups/reorder`     body: `{ items: [{id, order}, ...] }`
-- `POST /api/categories/reorder` body: `{ groupId, items: [{id, order}, ...] }`
-- `POST /api/masterGoals/reorder` body: `{ categoryId, items: [{id, order}, ...] }`
+## Phase C — Migrate consumers (20 files)
 
-Bulk reorder uses a single transactional write so partial failures don't leave gaps. Frontend sends the full ordered ID list after every move; backend overwrites `order` to the array index. This is simpler & idempotent vs. swap semantics.
+Order by blast-radius (smallest first):
 
-## 3. `AdminGoalsTab.tsx` — 3-tier accordion
+1. **Public reads (will become RSC in Phase D)**: `LandingPage`, `BlogListPage`, `BlogPostPage`, `CategoryPage`, `CategoryIndexPage`, `LeaderboardPage`, `StudentProfilePage`
+2. **Layout & shared**: `ClientLayout`, `Tracker`, `FloatingSettingsFab`, `useAuthRole`, `utils/hierarchy.ts`
+3. **Auth**: `LoginPage` → `signInWithEmailAndPassword` direct
+4. **Admin tabs**: `AdminDashboard`, `AdminStudentsTab`, `AdminGoalsTab`, `AdminBlogTab`, `AdminAppearanceTab`, `AdminUserManagement`, `AdminDatabaseTab`, `AdminImportExportTab`
 
-Split into sub-components (kept in same file for simplicity):
+For each file: swap `apiFetch(...)` for the matching hook/helper, drop dead `useEffect` plumbing, leave UI untouched.
 
-```text
-<GroupAccordion>
-  ├── header: name, +Category btn, ▲▼ reorder, edit/delete menu
-  └── <CategoryAccordion> (sorted by order)
-        ├── header: name, +Goal btn, ▲▼ reorder, edit/delete menu
-        └── <GoalCard grid>  (sorted by order)
-              └── card: title, points, ▲▼ reorder, edit/delete menu
-```
+## Phase D — Next.js App Router optimization
 
-- Top toolbar: "Group Baru" input + button (replaces standalone Category input).
-- "Category Baru" lives inside each Group header.
-- "Tugas Baru" modal gains a `Group` dropdown that filters the `Category` dropdown.
-- Reorder handlers call `moveItem(list, idx, dir)` then POST to the relevant `/reorder` endpoint with optimistic local update + `refreshData()` on success.
-- All three render passes use `[...arr].sort((a,b)=>a.order-b.order)`.
+Convert read-only public routes to **Server Components** with ISR:
 
-## 4. `AdminStudentsTab.tsx`
+- `app/blog/page.tsx` — `revalidate = 600`
+- `app/blog/[slug]/page.tsx` — `revalidate = 600` + `generateStaticParams` for popular slugs
+- `app/berita/kategori/page.tsx` + `[slug]/page.tsx` — `revalidate = 600` + `generateStaticParams`
+- `app/leaderboard/page.tsx` — `revalidate = 300`
+- `app/student/[id]/page.tsx` — `revalidate = 300`
+- `app/page.tsx` (landing) — `revalidate = 600`
 
-- `groupedGoalsByGroup` memo: builds `Group → Category → MasterGoal[]`, all sorted by `order`.
-- `StudentAdminModal` goal selector becomes a 3-tier collapsible list (reuses GoalAuditCard inside Category accordions inside Group accordions). Bulk-assign buttons live at Group **and** Category headers ("Tugaskan semua di Adab").
-- Filter/search input filters at goal level but preserves parent groupings (hide empty parents).
+Keep `app/admin/**` and interactive widgets as Client Components on Phase B hooks.
 
-## 5. `StudentProfilePage.tsx` — Papan Tugas
+`src/app/api/data/route.ts` becomes a health endpoint only.
 
-- Render Groups (sorted) → Categories (sorted) → Goals (sorted).
-- Per-Category progress bar: `completed / assigned in that category`.
-- Per-Group summary chip showing aggregate `done/total` and total points earned.
-- Wrap each Group panel in `<motion.div layout>` and goal list in `<AnimatePresence>` for smooth expand/collapse, matching existing framer-motion patterns.
+## Phase E — Demolition
 
-## 6. File touch list
+Delete in order once Phase C is green and typecheck clean:
 
-- `src/lib/types.ts` — extend interfaces
-- `src/components/admin/AdminGoalsTab.tsx` — full rewrite of layout, add Group CRUD + reorder, extract `<GroupAccordion>`, `<CategoryAccordion>`, `<GoalCard>` sub-components within the file
-- `src/components/admin/AdminStudentsTab.tsx` — refactor `groupedGoals`, update `StudentAdminModal` goal selector to 3-tier
-- `src/components/pages/StudentProfilePage.tsx` — refactor Papan Tugas section
-- `src/hooks/useAppQueries.ts` — add `groups` query + `useReorderMutation` helpers (if pattern exists)
-- New: `src/lib/hierarchy.ts` — pure helpers (`buildHierarchy`, `sortByOrder`, `moveItem`) reused by all three components
+1. `src/lib/api.ts`
+2. `src/lib/firebaseApi.ts` (801 lines)
+3. `src/lib/dbConnections.ts`
+4. `src/lib/firestoreDriver.ts` (re-target `AdminDatabaseTab` through Phase A first)
+5. `src/lib/db/` folder (`adapter.ts`, `adapters/*`, `index.ts`, `mappers.ts`, `types.ts`, `example.server.tsx`)
+6. `src/lib/firebaseClient.ts` (shim)
+7. `src/integrations/supabase/*` if no imports remain
+8. Stray shims in `src/lib/` whose home is `utils/` or `services/`
 
-No CSV/import-export changes required — those operate on flat collections and will pick up new columns automatically (verified against existing `AdminImportExportTab`).
+## Progress log
 
-## Risks / notes
-- Existing data lacks `groupId`/`order`. The fallback layer in `buildHierarchy` keeps the UI usable on day 1; admins gradually assign Groups via the new UI, or you run the optional migration helper.
-- Reorder endpoint is the only new backend contract — everything else is additive fields on existing endpoints.
-- This is purely the frontend refactor; the Go backend handlers must be implemented separately to honor `groupId`/`order` and the three `/reorder` endpoints.
+- **Phase A + B**: complete. Typed collections (`src/lib/firebase/collections.ts`), composable query helpers (`src/lib/firebase/queries.ts`), and the `createDomainHooks` factory plus per-domain hooks in `src/hooks/queries/` are live.
+- **Phase C (consumers)**: complete for the build path. All admin tabs, public pages, and the layout shell now import directly from `@/hooks/queries/*` and `firebase/firestore`. Missing third-party deps (firebase, react-query, radix-ui set, dnd-kit, tiptap stack, recharts, sonner, date-fns, etc.) installed; duplicate root `components/`, `hooks/`, `lib/` shims deleted.
+- **Phase E (partial)**: legacy `src/lib/api.ts` and `src/integrations/supabase/*` removed; remaining `lib/auth.ts` is the single token shim. `firebaseApi.ts`, `dbConnections.ts`, `firestoreDriver.ts`, `lib/db/`, `firebaseClient.ts` were already absent.
+- **Runtime fix (root layout)**: `app/layout.tsx` now mounts `ReactQueryClientProvider` + `ClientLayout` so client hooks (`useAuthQuery`, `useAppDataQuery`, factory `useList`) resolve a `QueryClient`. This unblocks every `"use client"` route that consumes Phase B hooks.
+- **Phase D (in progress)**:
+  - `app/blog/[slug]/page.tsx` — RSC, `revalidate = 600`.
+  - `app/page.tsx` (landing) — RSC wrapper, `revalidate = 600`. Inner `LandingPage` stays a client island.
+  - `app/blog/page.tsx` — RSC wrapper, `revalidate = 600`.
+  - `app/berita/kategori/page.tsx` — RSC wrapper, `revalidate = 600`.
+  - `app/berita/kategori/[slug]/page.tsx` — RSC wrapper with awaited `params`, `revalidate = 600`.
+  - `app/leaderboard/page.tsx` and `app/student/[id]/page.tsx` — dropped `dynamic(ssr:false)`; now SSR-friendly client pages (still need full RSC split + `generateStaticParams`).
+- **Phase E (cleanup)**: re-removed the regenerated `src/integrations/supabase/*` shim (no consumers remain).
+
+## Next up — finish Phase D
+
+1. Promote `app/leaderboard/page.tsx` to a true RSC: move `useAppDataQuery` + `calculateTotalPoints` into a small client island, fetch students/goals server-side via `firebase/firestore` Web SDK, `revalidate = 300`.
+2. Promote `app/student/[id]/page.tsx` to RSC + `generateStaticParams` for top-N students, `revalidate = 300`.
+3. Add `generateStaticParams` to `app/blog/[slug]` and `app/berita/kategori/[slug]` for popular slugs.
+
+## Next up — Phase D readiness
+
+Convert the remaining read-only public routes off `dynamic(ssr:false)`:
+
+1. `app/page.tsx` (landing) → RSC, fetch `appSettings` + featured data via Firebase Web SDK in a server util, hydrate a thin client island for interactive bits. `revalidate = 600`.
+2. `app/blog/page.tsx` → RSC list, `revalidate = 600`.
+3. `app/leaderboard/page.tsx` → RSC, server-side `calculateTotalPoints`, `revalidate = 300`.
+4. `app/student/[id]/page.tsx` → RSC + `generateStaticParams` for top N, `revalidate = 300`.
+5. `app/berita/kategori/(page|[slug])` → RSC + `generateStaticParams`, `revalidate = 600`.
+
+Server-side data access continues to use `firebase/firestore` Web SDK (rule-gated public reads) — no Admin SDK required. Each conversion: extract a `loadX()` server helper, render the existing presentational component as a Server Component, and keep only stateful widgets in client islands wrapped under the existing providers.
+
+## Phase F — Verification
+
+- `bunx tsc --noEmit` clean
+- Manual smoke: landing, blog list+post, leaderboard, student profile, admin dashboard, students/goals/blog CRUD, import/export
+- Firebase console: cold-load reads should be single-digit on cached public pages, ≤100 on admin lists
+- Lighthouse on `/` and `/blog` to confirm SSR HTML without client Firestore round-trip
+
+## Technical notes
+
+- RSC uses the same `firebase/firestore` Web SDK with env config; no Admin SDK needed because reads are rule-gated public. If privileged reads land later, add `src/lib/firebase/admin.ts` (server-only).
+- `withConverter` keeps `id` on read, strips it on write.
+- All writes funnel through `bulkWrite`/`patch` — never 500 individual writes.
+- `firestore.rules` untouched for now.
+
+## Out of scope
+
+- Firebase Admin SDK
+- Schema / collection-name changes
+- UI redesign of migrated screens
+
+## Risk & sequencing
+
+This is large (~25 files touched, ~10 new files, ~10 deletions). Phase A+B land first (additive, zero breakage). Phase C migrates in batches and runs typecheck between batches. Phases D and E only after C is fully green so we can revert any single phase cleanly.

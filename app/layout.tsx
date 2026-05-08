@@ -1,50 +1,19 @@
-import "@/index.css";
-import React from "react";
-import type { Metadata, Viewport } from "next";
-import { ClientLayout } from "@/components/layout/ClientLayout";
-import { ReactQueryClientProvider } from "@/components/providers/ReactQueryClientProvider";
-import { Toaster } from "sonner";
-import { Tracker } from "@/components/Tracker";
-import { GoogleAnalytics } from "@/components/GoogleAnalytics";
-import { OfflineIndicator } from "@/components/pwa/OfflineIndicator";
-import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
+import type {Metadata} from 'next';
+import './globals.css'; // Global styles
+import { ReactQueryClientProvider } from '@/components/providers/ReactQueryClientProvider';
+import { ClientLayout } from '@/components/layout/ClientLayout';
 
 export const metadata: Metadata = {
-  title: "Leaderboard Santri",
-  description: "Aplikasi pencapaian poin Santri",
-  manifest: "/manifest.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "Leaderboard Santri",
-  },
+  title: 'My Google AI Studio App',
+  description: 'My Google AI Studio App',
 };
 
-export const viewport: Viewport = {
-  themeColor: "#4f46e5",
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
-    <html lang="id" suppressHydrationWarning>
-      <body>
-        <GoogleAnalytics />
+    <html lang="en">
+      <body suppressHydrationWarning>
         <ReactQueryClientProvider>
-          <ClientLayout>
-            {children}
-            <Tracker />
-            <OfflineIndicator />
-            <ServiceWorkerRegistrar />
-            <Toaster richColors position="top-right" />
-          </ClientLayout>
+          <ClientLayout>{children}</ClientLayout>
         </ReactQueryClientProvider>
       </body>
     </html>

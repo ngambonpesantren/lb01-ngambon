@@ -33,8 +33,7 @@ import {
 } from "lucide-react";
 import { ImageUploader } from "../ui/ImageUploader";
 import { motion, AnimatePresence } from "framer-motion";
-import { apiFetch } from "../../lib/api";
-import { useUpdateStudentMutation } from "../../hooks/useAppQueries";
+import { StudentsAPI, AdminUsersAPI } from "@/hooks/queries";
 import { Avatar } from "../ui/custom-avatar";
 import { StudentSearchFilter } from "../StudentSearchFilter";
 import {
@@ -385,7 +384,8 @@ export function AdminStudentsTab({
 
   const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
   const [bulkDeleteIds, setBulkDeleteIds] = useState<string[] | null>(null);
-  const updateStudentMutation = useUpdateStudentMutation();
+  const upsertStudent = StudentsAPI.useUpsert();
+  const deleteStudent = StudentsAPI.useDelete();
 
   const studentsList = Array.isArray(students) ? students : [];
   const availableTags = useMemo(() => {
@@ -428,8 +428,8 @@ export function AdminStudentsTab({
     }
 
     try {
-      await updateStudentMutation.mutateAsync({
-        id: formData.id,
+      await upsertStudent.mutateAsync({
+        id: formData.id || undefined,
         data: finalData,
       });
       refreshData();
@@ -442,12 +442,13 @@ export function AdminStudentsTab({
 
   const executeDelete = async () => {
     if (!deleteConfirm) return;
-    const res = await apiFetch(`/api/students/${deleteConfirm.id}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) alert(`Failed to delete: ${res.statusText}`);
-    setDeleteConfirm(null);
-    refreshData();
+    try {
+      await deleteStudent.mutateAsync(deleteConfirm.id);
+      setDeleteConfirm(null);
+      refreshData();
+    } catch(err: any){
+      alert(`Failed to delete: ${err.message}`);
+    }
   };
 
   const handleBulkDelete = async () => {
@@ -455,7 +456,7 @@ export function AdminStudentsTab({
     try {
       await Promise.all(
         bulkDeleteIds.map((id) =>
-          apiFetch(`/api/students/${id}`, { method: "DELETE" }),
+          deleteStudent.mutateAsync(id)
         ),
       );
       setBulkDeleteIds(null);
@@ -748,30 +749,17 @@ function StudentAdminModal({
     formData.assignedGoals.find((ag) => ag.goalId === goalId)?.completed ||
     false;
 
-  // Fetch admin list for the marker dropdown (graceful failure → empty list).
+  // Fetch admin list for the marker dropdown.
   const { user } = useAuthRole();
-  const [admins, setAdmins] = useState<AdminOption[]>([]);
-  useEffect(() => {
-    let active = true;
-    apiFetch("/api/admin_users")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!active || !data) return;
-        const list = Array.isArray(data)
-          ? data
-          : data.users || data.admins || [];
-        setAdmins(
-          list.map((a: any) => ({
-            id: a.id,
-            name: a.full_name || a.email || "Admin",
-          })),
-        );
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { data: adminList } = AdminUsersAPI.useList();
+  
+  const admins = useMemo(() => {
+    const list = adminList || [];
+    return list.map((a: any) => ({
+      id: a.id,
+      name: a.full_name || a.email || "Admin",
+    }));
+  }, [adminList]);
   const currentAdmin: AdminOption = useMemo(
     () => ({
       id: user?.id || "self",
