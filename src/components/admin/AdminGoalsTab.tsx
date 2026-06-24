@@ -85,7 +85,8 @@ export function AdminGoalsTab({
   );
 
   const [editCatData, setEditCatData] = useState<Category | null>(null);
-  const [editCatName, setEditCatName] = useState("");
+  const [catModalOpen, setCatModalOpen] = useState(false);
+  const [editCatGroupId, setEditCatGroupId] = useState<string | null>(null);
   const [deleteCatConfirm, setDeleteCatConfirm] = useState<Category | null>(
     null,
   );
@@ -175,17 +176,19 @@ export function AdminGoalsTab({
     }
   };
 
-  const updateCategory = async () => {
-    if (!editCatName.trim() || !editCatData) return;
-    const res = await apiFetch(`/api/categories/${editCatData.id}`, {
-      method: "PUT",
+  const saveCategory = async (cat: Category) => {
+    const isNew = !cat.id;
+    const url = isNew ? `/api/categories` : `/api/categories/${cat.id}`;
+    const res = await apiFetch(url, {
+      method: isNew ? "POST" : "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...editCatData, name: editCatName }),
+      body: JSON.stringify(cat),
     });
-    if (!res.ok) alert(`Gagal memperbarui: ${res.statusText}`);
+    if (!res.ok) alert(`Gagal menyimpan kategori: ${res.statusText}`);
     else {
+      setCatModalOpen(false);
       setEditCatData(null);
-      setEditCatName("");
+      setEditCatGroupId(null);
       refreshData();
     }
   };
