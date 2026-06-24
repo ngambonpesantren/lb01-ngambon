@@ -16,6 +16,12 @@ import {
 } from "@/components/ui/carousel";
 import Autoplay from "embla-carousel-autoplay";
 import { motion, AnimatePresence } from "motion/react";
+import { useAppDataQuery } from "@/hooks/useAppQueries";
+import {
+  buildHierarchy,
+  FALLBACK_GROUP_ID,
+  FALLBACK_CATEGORY_ID,
+} from "@/lib/hierarchy";
 
 interface ProgramTabProps {
   createWheelHandler: (
@@ -33,8 +39,13 @@ export default function ProgramTab({ createWheelHandler }: ProgramTabProps) {
     Autoplay({ delay: 6000, stopOnInteraction: true, stopOnMouseEnter: true }),
   );
 
-  // 1. Database Master Program Lengkap (Klasikal & Modular)
-  const programDatabase = useMemo(
+  // 1. Live data dari admin Goals (Group → Category → Goal)
+  const { data: appData } = useAppDataQuery();
+  const liveGroups = appData?.groups || [];
+  const liveCategories = appData?.categories || [];
+  const liveGoals = appData?.masterGoals || [];
+
+  const FALLBACK_PROGRAMS = useMemo(
     () => [
       {
         id: "klasikal-diniyah",
@@ -286,8 +297,80 @@ export default function ProgramTab({ createWheelHandler }: ProgramTabProps) {
     [],
   );
 
+  // Bangun programDatabase dari hierarki live; fallback ke konten statis
+  // jika admin belum mengisi Group/Category/Goal.
+  const programDatabase = useMemo(() => {
+    if (!liveGroups.length) return FALLBACK_PROGRAMS;
+    const tree = buildHierarchy(liveGroups, liveCategories, liveGoals);
+    const mapped = tree
+      .filter(
+        (n) =>
+          n.group.id !== FALLBACK_GROUP_ID &&
+          (n.categories.length > 0 || n.group.description),
+      )
+      .map((n) => {
+        const curriculum = n.categories
+          .filter((c) => c.category.id !== FALLBACK_CATEGORY_ID)
+          .map((c) => ({
+            level: c.category.name,
+            detail:
+              c.category.description ||
+              (c.goals.length
+                ? `${c.goals.length} materi/tugas dalam fase ini.`
+                : "Detail kurikulum belum diisi."),
+          }));
+        const requirements = n.categories.flatMap((c) =>
+          c.goals.map((g) => ({
+            item: g.title,
+            detail: g.description || "Detail belum diisi.",
+          })),
+        );
+        return {
+          id: n.group.id,
+          title: n.group.name,
+          icon: n.group.icon || "📚",
+          shortDesc:
+            n.group.description ||
+            `${n.categories.length} fase kurikulum, ${requirements.length} materi.`,
+          fullDesc:
+            n.group.longDescription ||
+            n.group.description ||
+            "Deskripsi program belum diisi oleh admin.",
+          curriculum: curriculum.length
+            ? curriculum
+            : [
+                {
+                  level: "Belum ada fase kurikulum",
+                  detail: "Tambahkan kategori pada grup ini di admin.",
+                },
+              ],
+          requirements: requirements.length
+            ? requirements
+            : [
+                {
+                  item: "Belum ada persyaratan",
+                  detail: "Tambahkan tugas pada kategori di admin.",
+                },
+              ],
+        };
+      });
+    return mapped.length ? mapped : FALLBACK_PROGRAMS;
+  }, [liveGroups, liveCategories, liveGoals, FALLBACK_PROGRAMS]);
+
   // State Program yang Sedang Aktif (Default: Klasikal Diniyah)
-  const [selectedProgram, setSelectedProgram] = useState(programDatabase[0].id);
+  const [selectedProgram, setSelectedProgram] = useState<string>(
+    programDatabase[0]?.id || "",
+  );
+
+  // Sync selectedProgram saat live data masuk (id pertama berubah).
+  useEffect(() => {
+    if (
+      !programDatabase.find((p) => p.id === selectedProgram) &&
+      programDatabase[0]
+    ) {
+      setSelectedProgram(programDatabase[0].id);
+    }
+  }, [programDatabase, selectedProgram]);
 
   // State untuk melacak Accordion Kurikulum & Sertifikasi yang terbuka di bagian bawah
   const [openCurriculumIdx, setOpenCurriculumIdx] = useState<number | null>(
@@ -311,7 +394,10 @@ export default function ProgramTab({ createWheelHandler }: ProgramTabProps) {
 
   // Ambil objek data program yang aktif saat ini
   const activeProgramData = useMemo(() => {
-    return programDatabase.find((p) => p.id === selectedProgram)!;
+    return (
+      programDatabase.find((p) => p.id === selectedProgram) ||
+      programDatabase[0]
+    );
   }, [programDatabase, selectedProgram]);
 
   return (

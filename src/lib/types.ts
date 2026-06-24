@@ -20,6 +20,8 @@ export interface Category {
   groupId?: string;
   /** Manual ascending sort index within its Group. */
   order?: number;
+  /** Detail kurikulum / deskripsi level (ditampilkan di ProgramTab). */
+  description?: string;
 }
 
 export interface MasterGoal {
@@ -43,6 +45,12 @@ export interface Group {
   name: string;
   order: number;
   isSystem?: boolean;
+  /** Emoji ikon program (mis. "🏫"). */
+  icon?: string;
+  /** Ringkasan singkat program (1-2 kalimat). */
+  description?: string;
+  /** Deskripsi lengkap program (paragraf). */
+  longDescription?: string;
 }
 
 export interface AssignedGoal {
