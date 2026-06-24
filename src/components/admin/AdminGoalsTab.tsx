@@ -1300,23 +1300,75 @@ function GroupAdminModal({
 }) {
   const [name, setName] = useState(group?.name || "");
   const [order, setOrder] = useState(group?.order ?? 0);
+  const [icon, setIcon] = useState(group?.icon || "");
+  const [description, setDescription] = useState(group?.description || "");
+  const [longDescription, setLongDescription] = useState(
+    group?.longDescription || "",
+  );
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[60] flex justify-center items-center p-4">
-      <Card className="w-full max-w-md rounded-xl shadow-2xl border-border bg-card">
-        <CardHeader className="p-6 border-b border-border">
-          <div className="font-black text-lg">
-            {group ? "Edit Grup" : "Grup Baru"}
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[60] flex justify-center items-center p-4 overflow-y-auto">
+      <Card className="w-full max-w-xl rounded-2xl shadow-2xl border-border bg-card my-8">
+        <CardHeader className="p-6 border-b border-border bg-gradient-to-br from-primary/5 to-transparent">
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center text-2xl">
+              {icon || "📚"}
+            </div>
+            <div>
+              <div className="font-black text-lg leading-tight">
+                {group ? "Edit Program / Grup" : "Program / Grup Baru"}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Akan tampil sebagai kartu Program di halaman publik
+              </div>
+            </div>
           </div>
         </CardHeader>
-        <CardContent className="p-6 space-y-4">
+        <CardContent className="p-6 space-y-5">
+          <div className="grid grid-cols-[88px_1fr] gap-3">
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
+                Ikon
+              </label>
+              <Input
+                value={icon}
+                onChange={(e) => setIcon(e.target.value)}
+                placeholder="🏫"
+                maxLength={4}
+                className="h-11 text-center text-xl"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
+                Nama Program
+              </label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="mis. Klasikal Diniyah Kelas 1-6"
+                className="h-11"
+              />
+            </div>
+          </div>
           <div>
             <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
-              Nama
+              Deskripsi Singkat
             </label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="h-11"
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              placeholder="1-2 kalimat ringkas untuk kartu program."
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
+              Deskripsi Lengkap
+            </label>
+            <Textarea
+              value={longDescription}
+              onChange={(e) => setLongDescription(e.target.value)}
+              rows={5}
+              placeholder="Paragraf detail program: filosofi, target, metode."
             />
           </div>
           <div>
@@ -1327,7 +1379,7 @@ function GroupAdminModal({
               type="number"
               value={String(order)}
               onChange={(e) => setOrder(parseInt(e.target.value) || 0)}
-              className="h-11"
+              className="h-11 w-32"
             />
           </div>
         </CardContent>
@@ -1337,9 +1389,124 @@ function GroupAdminModal({
           </Button>
           <Button
             onClick={() =>
-              onSave({ ...(group ?? { id: "", isSystem: false }), name, order })
+              onSave({
+                ...(group ?? { id: "", isSystem: false }),
+                name,
+                order,
+                icon: icon || undefined,
+                description: description || undefined,
+                longDescription: longDescription || undefined,
+              })
             }
             className="rounded-xl h-11 shadow-primary-glow"
+          >
+            Simpan
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ---- CATEGORY MODAL ------------------------------------------------------
+function CategoryAdminModal({
+  category,
+  groupId,
+  groups,
+  onClose,
+  onSave,
+}: {
+  category: Category | null;
+  groupId: string | null;
+  groups: Group[];
+  onClose: () => void;
+  onSave: (c: Category) => void;
+}) {
+  const [name, setName] = useState(category?.name || "");
+  const [description, setDescription] = useState(category?.description || "");
+  const [order, setOrder] = useState(category?.order ?? 0);
+  const [grpId, setGrpId] = useState<string>(
+    category?.groupId || groupId || groups[0]?.id || "",
+  );
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[60] flex justify-center items-center p-4 overflow-y-auto">
+      <Card className="w-full max-w-xl rounded-2xl shadow-2xl border-border bg-card my-8">
+        <CardHeader className="p-6 border-b border-border bg-gradient-to-br from-accent/10 to-transparent">
+          <div className="font-black text-lg leading-tight">
+            {category ? "Edit Kategori / Fase" : "Kategori / Fase Baru"}
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">
+            Tampil sebagai fase kurikulum di kartu Program
+          </div>
+        </CardHeader>
+        <CardContent className="p-6 space-y-5">
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
+              Nama Kategori / Fase
+            </label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="mis. Fase Dasar: Kelas 1 - 2 (Ula)"
+              className="h-11"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
+              Deskripsi / Detail Kurikulum
+            </label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={4}
+              placeholder="Materi yang dipelajari pada fase ini."
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
+                Grup
+              </label>
+              <PopoverSelect
+                value={grpId}
+                onValueChange={setGrpId}
+                options={sortByOrder(groups).map((g) => ({
+                  value: g.id,
+                  label: g.name,
+                }))}
+                placeholder="Pilih Grup"
+                className="h-11 w-full"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
+                Urutan
+              </label>
+              <Input
+                type="number"
+                value={String(order)}
+                onChange={(e) => setOrder(parseInt(e.target.value) || 0)}
+                className="h-11"
+              />
+            </div>
+          </div>
+        </CardContent>
+        <div className="p-6 border-t border-border flex justify-end gap-3">
+          <Button variant="ghost" onClick={onClose} className="rounded-xl h-11">
+            Batal
+          </Button>
+          <Button
+            onClick={() =>
+              onSave({
+                ...(category ?? { id: "", name: "" }),
+                name,
+                description: description || undefined,
+                groupId: grpId || undefined,
+                order,
+              })
+            }
+            className="rounded-xl h-11 shadow-primary-glow"
+            disabled={!name.trim()}
           >
             Simpan
           </Button>
