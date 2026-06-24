@@ -846,6 +846,20 @@ export function AdminGoalsTab({
         />
       )}
 
+      {catModalOpen && (
+        <CategoryAdminModal
+          category={editCatData}
+          groupId={editCatGroupId}
+          groups={groups}
+          onClose={() => {
+            setCatModalOpen(false);
+            setEditCatData(null);
+            setEditCatGroupId(null);
+          }}
+          onSave={saveCategory}
+        />
+      )}
+
       <ConfirmModal
         isOpen={!!deleteGoalConfirm}
         title="Hapus Tugas Utama"
