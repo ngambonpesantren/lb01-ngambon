@@ -394,7 +394,10 @@ export default function ProgramTab({ createWheelHandler }: ProgramTabProps) {
 
   // Ambil objek data program yang aktif saat ini
   const activeProgramData = useMemo(() => {
-    return programDatabase.find((p) => p.id === selectedProgram)!;
+    return (
+      programDatabase.find((p) => p.id === selectedProgram) ||
+      programDatabase[0]
+    );
   }, [programDatabase, selectedProgram]);
 
   return (
