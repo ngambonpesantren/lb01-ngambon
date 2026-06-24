@@ -508,11 +508,22 @@ export function AdminGoalsTab({
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 {!isSystem && <DragHandle />}
-                <Layers className="h-5 w-5 text-primary shrink-0" />
+                {node.group.icon ? (
+                  <span className="text-2xl leading-none shrink-0" aria-hidden>
+                    {node.group.icon}
+                  </span>
+                ) : (
+                  <Layers className="h-5 w-5 text-primary shrink-0" />
+                )}
                 <div className="flex flex-col gap-0.5 min-w-0">
                   <span className="font-black text-foreground truncate">
                     {node.group.name}
                   </span>
+                  {node.group.description && (
+                    <span className="text-[11px] text-muted-foreground/90 italic truncate max-w-[42ch]">
+                      {node.group.description}
+                    </span>
+                  )}
                   <span className="text-muted-foreground text-xs font-bold">
                     {node.categories.length} kategori ·{" "}
                     {node.categories.reduce((n, c) => n + c.goals.length, 0)}{" "}
