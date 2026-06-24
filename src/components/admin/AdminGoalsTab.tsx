@@ -646,48 +646,25 @@ export function AdminGoalsTab({
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   {!isFallbackCat && <DragHandle />}
                   <FolderTree className="h-4 w-4 text-muted-foreground shrink-0" />
-                  {editCatData?.id === catId ? (
-                    <div
-                      className="flex flex-1 gap-2 items-center"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Input
-                        type="text"
-                        value={editCatName}
-                        onChange={(e) => setEditCatName(e.target.value)}
-                        autoFocus
-                        className="bg-background rounded-xl font-bold h-9 w-full sm:w-64"
-                      />
-                      <Button
-                        onClick={updateCategory}
-                        className="rounded-xl h-9"
-                      >
-                        Simpan
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() => setEditCatData(null)}
-                        className="rounded-xl h-9"
-                      >
-                        Batal
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-bold text-foreground truncate">
-                        {catNode.category.name}
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-bold text-foreground truncate">
+                      {catNode.category.name}
+                    </span>
+                    {catNode.category.description && (
+                      <span className="text-[11px] text-muted-foreground/90 italic truncate max-w-[48ch]">
+                        {catNode.category.description}
                       </span>
-                      <span className="text-[11px] text-muted-foreground font-bold">
-                        {catNode.goals.length} tugas
-                      </span>
-                    </div>
-                  )}
+                    )}
+                    <span className="text-[11px] text-muted-foreground font-bold">
+                      {catNode.goals.length} tugas
+                    </span>
+                  </div>
                 </div>
                 <div
                   className="flex items-center gap-1"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {!isFallbackCat && editCatData?.id !== catId && (
+                  {!isFallbackCat && (
                     <>
                       <Button
                         variant="ghost"
@@ -731,7 +708,8 @@ export function AdminGoalsTab({
                             label: "Edit",
                             onClick: () => {
                               setEditCatData(catNode.category);
-                              setEditCatName(catNode.category.name);
+                              setEditCatGroupId(node.group.id);
+                              setCatModalOpen(true);
                             },
                             icon: (
                               <Edit2 className="w-4 h-4 text-muted-foreground" />
