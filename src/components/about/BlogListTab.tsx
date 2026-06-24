@@ -608,6 +608,7 @@ function SmartSearchBar({
   onSortChange: (s: SortKey) => void;
   placeholder?: string;
   className?: string;
+  resultCount?: number;
 }) {
   const [showSort, setShowSort] = React.useState(false);
   const wrapRef = React.useRef<HTMLDivElement>(null);
