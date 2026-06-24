@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuthRole } from "@/hooks/useAuthRole";
-import { AdminUsersAPI } from "@/hooks/queries";
+import { apiFetch } from "@/lib/api";
 import {
   Card,
   CardContent,
@@ -37,11 +37,8 @@ import type { AdminUser, AdminRole } from "@/lib/types";
 
 export function AdminUserManagement() {
   const { user, isSuperAdmin, loading: authLoading } = useAuthRole();
-  const { data: users = [], isLoading: usersLoading } = AdminUsersAPI.useList({ enabled: !authLoading && isSuperAdmin });
-  const upsertMutation = AdminUsersAPI.useUpsert();
-  const deleteMutation = AdminUsersAPI.useDelete();
-
-  const loading = authLoading || (isSuperAdmin ? usersLoading : false);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Form State
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -55,25 +52,57 @@ export function AdminUserManagement() {
     photo_url: "",
   });
 
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const res = await apiFetch("/api/admin_users");
+      if (res.ok) {
+        setUsers(await res.json());
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!authLoading && isSuperAdmin) {
+      fetchUsers();
+    } else {
+      setLoading(false);
+    }
+  }, [authLoading, isSuperAdmin]);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const endpoint = "/api/admin_users";
       // If regular admin, they can only update themselves
       const targetId = editingUser?.id || (isSuperAdmin ? null : user?.id);
-      const payload = { ...formData };
+      const method = targetId ? "PUT" : "POST";
+      const payload = { ...formData, id: targetId };
 
       // Ensure a regular admin cannot escalate role to super_admin
       if (!isSuperAdmin) {
         payload.role = "admin"; // Force role to stay admin
       }
 
-      await upsertMutation.mutateAsync({ id: targetId || undefined, data: payload as any });
+      const res = await apiFetch(endpoint, {
+        method,
+        body: JSON.stringify(payload),
+      });
 
-      setIsDialogOpen(false);
-      if (isSuperAdmin) {
-        alert('Admin berhasil diperbarui!');
+      if (res.ok) {
+        setIsDialogOpen(false);
+        if (isSuperAdmin) {
+          fetchUsers();
+          alert('Admin berhasil diperbarui!');
+        } else {
+          alert("Profil berhasil diperbarui. Silakan refresh halaman.");
+        }
       } else {
-        alert("Profil berhasil diperbarui. Silakan refresh halaman.");
+        alert("Gagal menyimpan data pengguna.");
       }
     } catch {
       alert("Terjadi kesalahan teknis.");
@@ -83,7 +112,12 @@ export function AdminUserManagement() {
   const handleDelete = async () => {
     if (!deleteConfirmId) return;
     try {
-      await deleteMutation.mutateAsync(deleteConfirmId);
+      const res = await apiFetch(`/api/admin_users?id=${deleteConfirmId}`, { method: "DELETE" });
+      if (res.ok) {
+        fetchUsers();
+      } else {
+        alert("Gagal menghapus admin.");
+      }
     } catch {
       alert("Terjadi kesalahan saat menghapus.");
     } finally {

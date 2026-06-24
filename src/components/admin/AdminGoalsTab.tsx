@@ -11,7 +11,7 @@ import {
   FolderTree,
   Layers,
 } from "lucide-react";
-import { GroupsAPI, CategoriesAPI, GoalsAPI } from "@/hooks/queries";
+import { apiFetch } from "../../lib/api";
 import { motion, AnimatePresence } from "motion/react";
 import { ConfirmModal } from "../ui/ConfirmModal";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -23,12 +23,13 @@ import type { Category, MasterGoal, Group } from "../../lib/types";
 import {
   buildHierarchy,
   moveItem,
+  persistReorder,
   sortByOrder,
   FALLBACK_GROUP_ID,
   FALLBACK_CATEGORY_ID,
   type HierarchyGroupNode,
 } from "@/lib/hierarchy";
-import { SortableList, DragHandle, SortableRow } from "./editor/sortable";
+import { DragHandle, SortableRow } from "./editor/sortable";
 import {
   DndContext,
   closestCenter,
@@ -69,21 +70,33 @@ export function AdminGoalsTab({
   // ---- modals ------------------------------------------------------------
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [editGoalData, setEditGoalData] = useState<MasterGoal | null>(null);
-  const [goalDefaultCategoryId, setGoalDefaultCategoryId] = useState<string | null>(null);
-  const [deleteGoalConfirm, setDeleteGoalConfirm] = useState<MasterGoal | null>(null);
+  const [goalDefaultCategoryId, setGoalDefaultCategoryId] = useState<
+    string | null
+  >(null);
+  const [deleteGoalConfirm, setDeleteGoalConfirm] = useState<MasterGoal | null>(
+    null,
+  );
 
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [editGroupData, setEditGroupData] = useState<Group | null>(null);
-  const [deleteGroupConfirm, setDeleteGroupConfirm] = useState<Group | null>(null);
+  const [deleteGroupConfirm, setDeleteGroupConfirm] = useState<Group | null>(
+    null,
+  );
 
   const [editCatData, setEditCatData] = useState<Category | null>(null);
   const [editCatName, setEditCatName] = useState("");
-  const [deleteCatConfirm, setDeleteCatConfirm] = useState<Category | null>(null);
+  const [deleteCatConfirm, setDeleteCatConfirm] = useState<Category | null>(
+    null,
+  );
 
   const [newGroupName, setNewGroupName] = useState("");
-  const [catDraftByGroup, setCatDraftByGroup] = useState<Record<string, string>>({});
+  const [catDraftByGroup, setCatDraftByGroup] = useState<
+    Record<string, string>
+  >({});
 
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
+    {},
+  );
   const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
 
   const tree: HierarchyGroupNode[] = useMemo(
@@ -92,120 +105,124 @@ export function AdminGoalsTab({
   );
 
   const toggleGroup = (id: string) =>
-    setExpandedGroups((p) => ({ ...p, [id]: p[id] === undefined ? false : !p[id] }));
+    setExpandedGroups((p) => ({ ...p, [id]: !p[id] }));
   const toggleCat = (id: string) =>
-    setExpandedCats((p) => ({ ...p, [id]: p[id] === undefined ? false : !p[id] }));
-
-  // ---- MUTATIONS ---------------------------------------------------------
-  const upsertGroup = GroupsAPI.useUpsert();
-  const deleteGroup = GroupsAPI.useDelete();
-
-  const upsertCategory = CategoriesAPI.useUpsert();
-  const deleteCategory = CategoriesAPI.useDelete();
-
-  const upsertGoal = GoalsAPI.useUpsert();
-  const deleteGoal = GoalsAPI.useDelete();
-
-  const bulkGroup = GroupsAPI.useBulk();
-  const bulkCategory = CategoriesAPI.useBulk();
-  const bulkGoal = GoalsAPI.useBulk();
+    setExpandedCats((p) => ({ ...p, [id]: !p[id] }));
 
   // ---- GROUP CRUD --------------------------------------------------------
   const addGroup = async () => {
     const name = newGroupName.trim();
     if (!name) return;
-    try {
-      const order = (sortByOrder(groups).slice(-1)[0]?.order ?? -1) + 1;
-      await upsertGroup.mutateAsync({ data: { name, order } });
+    const order = (sortByOrder(groups).slice(-1)[0]?.order ?? -1) + 1;
+    const res = await apiFetch("/api/groups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, order }),
+    });
+    if (!res.ok) alert(`Gagal membuat grup: ${res.statusText}`);
+    else {
       setNewGroupName("");
       refreshData();
-    } catch (e: any) {
-      alert(`Gagal membuat grup: ${e.message}`);
     }
   };
 
   const saveGroup = async (g: Group) => {
-    try {
-      await upsertGroup.mutateAsync({ id: g.id || undefined, data: g });
+    const url = g.id ? `/api/groups/${g.id}` : "/api/groups";
+    const method = g.id ? "PUT" : "POST";
+    const res = await apiFetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(g),
+    });
+    if (!res.ok) alert(`Gagal menyimpan grup: ${res.statusText}`);
+    else {
       setGroupModalOpen(false);
       setEditGroupData(null);
       refreshData();
-    } catch (e: any) {
-      alert(`Gagal menyimpan grup: ${e.message}`);
     }
   };
 
   const executeDeleteGroup = async () => {
     if (!deleteGroupConfirm) return;
-    try {
-      await deleteGroup.mutateAsync(deleteGroupConfirm.id);
-      setDeleteGroupConfirm(null);
-      refreshData();
-    } catch (e: any) {
-      alert(`Gagal menghapus: ${e.message}`);
-    }
+    const res = await apiFetch(`/api/groups/${deleteGroupConfirm.id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) alert(`Gagal menghapus: ${res.statusText}`);
+    setDeleteGroupConfirm(null);
+    refreshData();
   };
 
   // ---- CATEGORY CRUD -----------------------------------------------------
   const addCategoryToGroup = async (groupId: string) => {
     const name = (catDraftByGroup[groupId] || "").trim();
     if (!name) return;
-    try {
-      const siblings = categories.filter((c) => (c.groupId || FALLBACK_GROUP_ID) === groupId);
-      const order = (sortByOrder(siblings).slice(-1)[0]?.order ?? -1) + 1;
-      const body: any = { name, order };
-      if (groupId !== FALLBACK_GROUP_ID) body.groupId = groupId;
-      await upsertCategory.mutateAsync({ data: body });
+    const siblings = categories.filter(
+      (c) => (c.groupId || FALLBACK_GROUP_ID) === groupId,
+    );
+    const order = (sortByOrder(siblings).slice(-1)[0]?.order ?? -1) + 1;
+    const body: any = { name, order };
+    if (groupId !== FALLBACK_GROUP_ID) body.groupId = groupId;
+    const res = await apiFetch("/api/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) alert(`Gagal membuat kategori: ${res.statusText}`);
+    else {
       setCatDraftByGroup((p) => ({ ...p, [groupId]: "" }));
       refreshData();
-    } catch (e: any) {
-      alert(`Gagal membuat kategori: ${e.message}`);
     }
   };
 
   const updateCategory = async () => {
     if (!editCatName.trim() || !editCatData) return;
-    try {
-      await upsertCategory.mutateAsync({ id: editCatData.id, data: { ...editCatData, name: editCatName } });
+    const res = await apiFetch(`/api/categories/${editCatData.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...editCatData, name: editCatName }),
+    });
+    if (!res.ok) alert(`Gagal memperbarui: ${res.statusText}`);
+    else {
       setEditCatData(null);
       setEditCatName("");
       refreshData();
-    } catch (e: any) {
-      alert(`Gagal memperbarui: ${e.message}`);
     }
   };
 
   const executeDeleteCategory = async () => {
     if (!deleteCatConfirm) return;
-    try {
-      await deleteCategory.mutateAsync(deleteCatConfirm.id);
-      setDeleteCatConfirm(null);
-      refreshData();
-    } catch (e: any) {
-      alert(`Gagal menghapus: ${e.message}`);
-    }
+    const res = await apiFetch(`/api/categories/${deleteCatConfirm.id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) alert(`Gagal menghapus: ${res.statusText}`);
+    setDeleteCatConfirm(null);
+    refreshData();
   };
 
   // ---- GOAL CRUD ---------------------------------------------------------
   const handleSaveGoal = async (formData: MasterGoal) => {
-    try {
-      await upsertGoal.mutateAsync({ id: formData.id || undefined, data: formData });
+    const isNew = !formData.id;
+    const url = isNew ? "/api/masterGoals" : `/api/masterGoals/${formData.id}`;
+    const res = await apiFetch(url, {
+      method: isNew ? "POST" : "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(formData),
+    });
+    if (!res.ok) alert(`Gagal menyimpan: ${res.statusText}`);
+    else {
       refreshData();
       setGoalModalOpen(false);
-    } catch (e: any) {
-      alert(`Gagal menyimpan: ${e.message}`);
     }
   };
 
   const executeDeleteGoal = async () => {
     if (!deleteGoalConfirm) return;
-    try {
-      await deleteGoal.mutateAsync(deleteGoalConfirm.id);
-      setDeleteGoalConfirm(null);
-      refreshData();
-    } catch (e: any) {
-      alert(`Gagal menghapus: ${e.message}`);
-    }
+    const res = await apiFetch(`/api/masterGoals/${deleteGoalConfirm.id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) alert(`Gagal menghapus: ${res.statusText}`);
+    setDeleteGoalConfirm(null);
+    refreshData();
   };
 
   // ---- REORDER (▲▼ buttons) --------------------------------------------
@@ -213,19 +230,23 @@ export function AdminGoalsTab({
     const ordered = moveItem(sortByOrder(groups), id, dir);
     if (ordered === groups) return;
     try {
-      await bulkGroup.mutateAsync({ rows: ordered.map((o, i) => ({ ...o, order: i })) });
+      await persistReorder("/api/groups/reorder", ordered);
     } finally {
       refreshData();
     }
   };
-  const reorderCategories = async (groupId: string, id: string, dir: -1 | 1) => {
+  const reorderCategories = async (
+    groupId: string,
+    id: string,
+    dir: -1 | 1,
+  ) => {
     const siblings = sortByOrder(
       categories.filter((c) => (c.groupId || FALLBACK_GROUP_ID) === groupId),
     );
     const ordered = moveItem(siblings, id, dir);
     if (ordered === siblings) return;
     try {
-      await bulkCategory.mutateAsync({ rows: ordered.map((o, i) => ({ ...o, order: i })) });
+      await persistReorder("/api/categories/reorder", ordered, { groupId });
     } finally {
       refreshData();
     }
@@ -235,15 +256,20 @@ export function AdminGoalsTab({
       masterGoals.filter((g) => {
         if (g.categoryId) return g.categoryId === categoryId;
         const cat = categories.find(
-          (c) => c.name && g.categoryName && c.name.toLowerCase() === g.categoryName.toLowerCase(),
+          (c) =>
+            c.name &&
+            g.categoryName &&
+            c.name.toLowerCase() === g.categoryName.toLowerCase(),
         );
-        return cat ? cat.id === categoryId : categoryId === FALLBACK_CATEGORY_ID;
+        return cat
+          ? cat.id === categoryId
+          : categoryId === FALLBACK_CATEGORY_ID;
       }),
     );
     const ordered = moveItem(siblings, id, dir);
     if (ordered === siblings) return;
     try {
-      await bulkGoal.mutateAsync({ rows: ordered.map((o, i) => ({ ...o, order: i })) });
+      await persistReorder("/api/masterGoals/reorder", ordered, { categoryId });
     } finally {
       refreshData();
     }
@@ -252,23 +278,117 @@ export function AdminGoalsTab({
   // ---- DnD persistence (full ordered list) -------------------------------
   const persistGroupOrder = async (next: { id: string }[]) => {
     try {
-      await bulkGroup.mutateAsync({ rows: next.map((n, i) => ({ id: n.id, order: i } as any)) });
+      await persistReorder("/api/groups/reorder", next);
     } finally {
       refreshData();
     }
   };
-  const persistCategoryOrder = async (groupId: string, next: { id: string }[]) => {
+  const persistCategoryOrder = async (
+    groupId: string,
+    next: { id: string }[],
+  ) => {
     try {
-      await bulkCategory.mutateAsync({ rows: next.map((n, i) => ({ id: n.id, order: i } as any)) });
+      await persistReorder("/api/categories/reorder", next, { groupId });
     } finally {
       refreshData();
     }
   };
-  const persistGoalOrder = async (categoryId: string, next: { id: string }[]) => {
+  const persistGoalOrder = async (
+    categoryId: string,
+    next: { id: string }[],
+  ) => {
     try {
-      await bulkGoal.mutateAsync({ rows: next.map((n, i) => ({ id: n.id, order: i } as any)) });
+      await persistReorder("/api/masterGoals/reorder", next, { categoryId });
     } finally {
       refreshData();
+    }
+  };
+
+  // Cross-category goal move: PUT goal with new category, then reorder both lists.
+  const moveGoalToCategory = async (
+    goalId: string,
+    destCategoryId: string,
+    destIndex: number,
+  ) => {
+    const goal = masterGoals.find((g) => g.id === goalId);
+    if (!goal) return;
+    const destCat = categories.find((c) => c.id === destCategoryId);
+
+    // Resolve current category id for the goal.
+    const srcCategoryId =
+      goal.categoryId ||
+      categories.find(
+        (c) =>
+          c.name &&
+          goal.categoryName &&
+          c.name.toLowerCase() === goal.categoryName.toLowerCase(),
+      )?.id ||
+      FALLBACK_CATEGORY_ID;
+
+    if (srcCategoryId === destCategoryId) return;
+
+    try {
+      await apiFetch(`/api/masterGoals/${goalId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...goal,
+          categoryId:
+            destCategoryId === FALLBACK_CATEGORY_ID ? null : destCategoryId,
+          categoryName: destCat?.name || goal.categoryName,
+        }),
+      });
+    } catch (e) {
+      console.warn("move goal failed", e);
+    }
+
+    // Build dest list with new goal inserted at destIndex.
+    const destSiblings = sortByOrder(
+      masterGoals.filter((g) => {
+        if (g.id === goalId) return false;
+        if (g.categoryId) return g.categoryId === destCategoryId;
+        const cat = categories.find(
+          (c) =>
+            c.name &&
+            g.categoryName &&
+            c.name.toLowerCase() === g.categoryName.toLowerCase(),
+        );
+        return cat
+          ? cat.id === destCategoryId
+          : destCategoryId === FALLBACK_CATEGORY_ID;
+      }),
+    );
+    const destNext = [...destSiblings];
+    destNext.splice(Math.min(destIndex, destNext.length), 0, {
+      ...goal,
+      id: goalId,
+    } as MasterGoal);
+    await persistGoalOrder(
+      destCategoryId,
+      destNext.map((g) => ({ id: g.id })),
+    );
+
+    // Reorder src list (without moved goal) so its order stays compact.
+    const srcSiblings = sortByOrder(
+      masterGoals.filter((g) => {
+        if (g.id === goalId) return false;
+        if (g.categoryId) return g.categoryId === srcCategoryId;
+        const cat = categories.find(
+          (c) =>
+            c.name &&
+            g.categoryName &&
+            c.name.toLowerCase() === g.categoryName.toLowerCase(),
+        );
+        return cat
+          ? cat.id === srcCategoryId
+          : srcCategoryId === FALLBACK_CATEGORY_ID;
+      }),
+    );
+    if (srcCategoryId !== FALLBACK_CATEGORY_ID) {
+      await persistGoalOrder(
+        srcCategoryId,
+        srcSiblings.map((g) => ({ id: g.id })),
+      );
     }
   };
 
@@ -324,8 +444,11 @@ export function AdminGoalsTab({
         tree={tree}
         groups={groups}
         categories={categories}
+        masterGoals={masterGoals}
         persistGroupOrder={persistGroupOrder}
         persistCategoryOrder={persistCategoryOrder}
+        persistGoalOrder={persistGoalOrder}
+        moveGoalToCategory={moveGoalToCategory}
         moveCategoryToGroup={async (catId, destGroupId, destIndex) => {
           // Optimistic-ish: send full ordered list of dest group with new cat inserted at index, plus updated categoryGroup PUT.
           const cat = categories.find((c) => c.id === catId);
@@ -333,25 +456,46 @@ export function AdminGoalsTab({
           const srcGroupId = cat.groupId || FALLBACK_GROUP_ID;
           // Update category's groupId
           try {
-            await upsertCategory.mutateAsync({
-              id: catId,
-              data: { ...cat, groupId: destGroupId === FALLBACK_GROUP_ID ? undefined : destGroupId },
+            await apiFetch(`/api/categories/${catId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...cat,
+                groupId: destGroupId === FALLBACK_GROUP_ID ? null : destGroupId,
+              }),
             });
           } catch (e) {
             console.warn("move category failed", e);
           }
           // Reorder destination
           const destSiblings = sortByOrder(
-            categories.filter((c) => (c.groupId || FALLBACK_GROUP_ID) === destGroupId && c.id !== catId),
+            categories.filter(
+              (c) =>
+                (c.groupId || FALLBACK_GROUP_ID) === destGroupId &&
+                c.id !== catId,
+            ),
           );
           const destNext = [...destSiblings];
-          destNext.splice(Math.min(destIndex, destNext.length), 0, { ...cat, groupId: destGroupId });
-          await persistCategoryOrder(destGroupId, destNext.map((c) => ({ id: c.id })));
+          destNext.splice(Math.min(destIndex, destNext.length), 0, {
+            ...cat,
+            groupId: destGroupId,
+          });
+          await persistCategoryOrder(
+            destGroupId,
+            destNext.map((c) => ({ id: c.id })),
+          );
           if (srcGroupId !== destGroupId) {
             const srcNext = sortByOrder(
-              categories.filter((c) => (c.groupId || FALLBACK_GROUP_ID) === srcGroupId && c.id !== catId),
+              categories.filter(
+                (c) =>
+                  (c.groupId || FALLBACK_GROUP_ID) === srcGroupId &&
+                  c.id !== catId,
+              ),
             );
-            await persistCategoryOrder(srcGroupId, srcNext.map((c) => ({ id: c.id })));
+            await persistCategoryOrder(
+              srcGroupId,
+              srcNext.map((c) => ({ id: c.id })),
+            );
           }
         }}
         renderGroupHeader={(node, gi) => {
@@ -362,31 +506,67 @@ export function AdminGoalsTab({
                 {!isSystem && <DragHandle />}
                 <Layers className="h-5 w-5 text-primary shrink-0" />
                 <div className="flex flex-col gap-0.5 min-w-0">
-                  <span className="font-black text-foreground truncate">{node.group.name}</span>
+                  <span className="font-black text-foreground truncate">
+                    {node.group.name}
+                  </span>
                   <span className="text-muted-foreground text-xs font-bold">
                     {node.categories.length} kategori ·{" "}
-                    {node.categories.reduce((n, c) => n + c.goals.length, 0)} tugas
+                    {node.categories.reduce((n, c) => n + c.goals.length, 0)}{" "}
+                    tugas
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <div
+                className="flex items-center gap-1"
+                onClick={(e) => e.stopPropagation()}
+              >
                 {!isSystem && (
                   <>
-                    <Button variant="ghost" size="icon" title="Pindah ke atas" disabled={gi === 0} onClick={() => reorderGroups(node.group.id, -1)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Pindah ke atas"
+                      className="hidden lg:inline"
+                      disabled={gi === 0}
+                      onClick={() => reorderGroups(node.group.id, -1)}
+                    >
                       <ArrowUp className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" title="Pindah ke bawah" disabled={gi >= tree.length - 1} onClick={() => reorderGroups(node.group.id, 1)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Pindah ke bawah"
+                      className="hidden lg:inline"
+                      disabled={gi >= tree.length - 1}
+                      onClick={() => reorderGroups(node.group.id, 1)}
+                    >
                       <ArrowDown className="w-4 h-4" />
                     </Button>
                     <SimpleMenu
                       options={[
-                        { label: "Edit Grup", onClick: () => { setEditGroupData(node.group); setGroupModalOpen(true); }, icon: <Edit2 className="w-4 h-4 text-muted-foreground" /> },
-                        { label: "Hapus Grup", onClick: () => setDeleteGroupConfirm(node.group), icon: <Trash2 className="w-4 h-4 text-destructive/70" />, variant: "destructive" as const },
+                        {
+                          label: "Edit Grup",
+                          onClick: () => {
+                            setEditGroupData(node.group);
+                            setGroupModalOpen(true);
+                          },
+                          icon: (
+                            <Edit2 className="w-4 h-4 text-muted-foreground" />
+                          ),
+                        },
+                        {
+                          label: "Hapus Grup",
+                          onClick: () => setDeleteGroupConfirm(node.group),
+                          icon: (
+                            <Trash2 className="w-4 h-4 text-destructive/70" />
+                          ),
+                          variant: "destructive" as const,
+                        },
                       ]}
                     />
                   </>
                 )}
-                {(expandedGroups[node.group.id] !== false) ? (
+                {expandedGroups[node.group.id] === true ? (
                   <ChevronUp className="w-5 h-5 text-muted-foreground ml-1" />
                 ) : (
                   <ChevronDown className="w-5 h-5 text-muted-foreground ml-1" />
@@ -395,7 +575,7 @@ export function AdminGoalsTab({
             </div>
           );
         }}
-        isGroupExpanded={(id) => expandedGroups[id] !== false}
+        isGroupExpanded={(id) => expandedGroups[id] === true}
         toggleGroup={toggleGroup}
         renderGroupBody={(node) => {
           const isSystem = node.group.isSystem;
@@ -403,14 +583,22 @@ export function AdminGoalsTab({
             <CardContent className="p-4 pt-3 border-t border-border/40 bg-background space-y-3">
               {!isSystem && (
                 <form
-                  onSubmit={(e) => { e.preventDefault(); addCategoryToGroup(node.group.id); }}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    addCategoryToGroup(node.group.id);
+                  }}
                   className="flex gap-2"
                 >
                   <Input
                     type="text"
                     placeholder="Nama Kategori Baru"
                     value={catDraftByGroup[node.group.id] || ""}
-                    onChange={(e) => setCatDraftByGroup((p) => ({ ...p, [node.group.id]: e.target.value }))}
+                    onChange={(e) =>
+                      setCatDraftByGroup((p) => ({
+                        ...p,
+                        [node.group.id]: e.target.value,
+                      }))
+                    }
                     className="h-10 rounded-xl border-border bg-card font-bold"
                   />
                   <Button type="submit" className="h-10 rounded-xl">
@@ -420,7 +608,8 @@ export function AdminGoalsTab({
               )}
               {node.categories.length === 0 && (
                 <p className="text-xs text-muted-foreground italic text-center py-4">
-                  Belum ada kategori di grup ini. Seret kategori ke sini untuk memindahkan.
+                  Belum ada kategori di grup ini. Seret kategori ke sini untuk
+                  memindahkan.
                 </p>
               )}
             </CardContent>
@@ -428,10 +617,13 @@ export function AdminGoalsTab({
         }}
         renderCategory={(node, catNode, ci) => {
           const catId = catNode.category.id;
-          const catExpanded = expandedCats[catId] !== false;
+          const catExpanded = expandedCats[catId] === true;
           const isFallbackCat = catId === FALLBACK_CATEGORY_ID;
           return (
-            <Card key={catId} className="rounded-xl border-border overflow-hidden">
+            <Card
+              key={catId}
+              className="rounded-xl border-border overflow-hidden"
+            >
               <CardHeader
                 className="p-3 cursor-pointer hover:bg-secondary/20 transition-colors flex flex-row items-center justify-between space-y-0"
                 onClick={() => toggleCat(catId)}
@@ -440,34 +632,105 @@ export function AdminGoalsTab({
                   {!isFallbackCat && <DragHandle />}
                   <FolderTree className="h-4 w-4 text-muted-foreground shrink-0" />
                   {editCatData?.id === catId ? (
-                    <div className="flex flex-1 gap-2 items-center" onClick={(e) => e.stopPropagation()}>
-                      <Input type="text" value={editCatName} onChange={(e) => setEditCatName(e.target.value)} autoFocus className="bg-background rounded-xl font-bold h-9 w-full sm:w-64" />
-                      <Button onClick={updateCategory} className="rounded-xl h-9">Simpan</Button>
-                      <Button variant="ghost" onClick={() => setEditCatData(null)} className="rounded-xl h-9">Batal</Button>
+                    <div
+                      className="flex flex-1 gap-2 items-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Input
+                        type="text"
+                        value={editCatName}
+                        onChange={(e) => setEditCatName(e.target.value)}
+                        autoFocus
+                        className="bg-background rounded-xl font-bold h-9 w-full sm:w-64"
+                      />
+                      <Button
+                        onClick={updateCategory}
+                        className="rounded-xl h-9"
+                      >
+                        Simpan
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => setEditCatData(null)}
+                        className="rounded-xl h-9"
+                      >
+                        Batal
+                      </Button>
                     </div>
                   ) : (
                     <div className="flex flex-col min-w-0">
-                      <span className="font-bold text-foreground truncate">{catNode.category.name}</span>
-                      <span className="text-[11px] text-muted-foreground font-bold">{catNode.goals.length} tugas</span>
+                      <span className="font-bold text-foreground truncate">
+                        {catNode.category.name}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground font-bold">
+                        {catNode.goals.length} tugas
+                      </span>
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="flex items-center gap-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {!isFallbackCat && editCatData?.id !== catId && (
                     <>
-                      <Button variant="ghost" size="icon" title="Pindah ke atas" disabled={ci === 0} onClick={() => reorderCategories(node.group.id, catId, -1)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Pindah ke atas"
+                        className="hidden lg:inline"
+                        disabled={ci === 0}
+                        onClick={() =>
+                          reorderCategories(node.group.id, catId, -1)
+                        }
+                      >
                         <ArrowUp className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" title="Pindah ke bawah" disabled={ci >= node.categories.length - 1} onClick={() => reorderCategories(node.group.id, catId, 1)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Pindah ke bawah"
+                        className="hidden lg:inline"
+                        disabled={ci >= node.categories.length - 1}
+                        onClick={() =>
+                          reorderCategories(node.group.id, catId, 1)
+                        }
+                      >
                         <ArrowDown className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => { setEditGoalData(null); setGoalDefaultCategoryId(catId); setGoalModalOpen(true); }}>
-                        <Plus className="w-4 h-4 mr-1" />Tugas
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditGoalData(null);
+                          setGoalDefaultCategoryId(catId);
+                          setGoalModalOpen(true);
+                        }}
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Tugas
                       </Button>
                       <SimpleMenu
                         options={[
-                          { label: "Edit", onClick: () => { setEditCatData(catNode.category); setEditCatName(catNode.category.name); }, icon: <Edit2 className="w-4 h-4 text-muted-foreground" /> },
-                          { label: "Delete", onClick: () => setDeleteCatConfirm(catNode.category), icon: <Trash2 className="w-4 h-4 text-destructive/70" />, variant: "destructive" as const },
+                          {
+                            label: "Edit",
+                            onClick: () => {
+                              setEditCatData(catNode.category);
+                              setEditCatName(catNode.category.name);
+                            },
+                            icon: (
+                              <Edit2 className="w-4 h-4 text-muted-foreground" />
+                            ),
+                          },
+                          {
+                            label: "Delete",
+                            onClick: () =>
+                              setDeleteCatConfirm(catNode.category),
+                            icon: (
+                              <Trash2 className="w-4 h-4 text-destructive/70" />
+                            ),
+                            variant: "destructive" as const,
+                          },
                         ]}
                       />
                     </>
@@ -481,47 +744,84 @@ export function AdminGoalsTab({
               </CardHeader>
               <AnimatePresence initial={false}>
                 {catExpanded && (
-                  <motion.div layout initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: "hidden" }}>
+                  <motion.div
+                    layout
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    style={{ overflow: "hidden" }}
+                  >
                     <CardContent className="p-3 pt-0 border-t border-border/40 bg-card">
-                      {catNode.goals.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic text-center py-6">Tidak ada tugas di kategori ini.</p>
-                      ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                          <SortableList
-                            items={catNode.goals.map((g: MasterGoal) => ({ id: g.id, mg: g }))}
-                            strategy="grid"
-                            onReorder={(next) => persistGoalOrder(catId, next.map((x: any) => ({ id: x.id })))}
-                          >
-                            {(item: any) => {
-                              const mg = item.mg as MasterGoal;
-                              return (
-                                <Card key={mg.id} className="rounded-xl border border-border shadow-none hover:shadow-soft transition-shadow group relative">
+                      <GoalGridDropZone
+                        categoryId={catId}
+                        isEmpty={catNode.goals.length === 0}
+                      >
+                        <SortableContext
+                          items={catNode.goals.map((g) => `t:${g.id}`)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                            {catNode.goals.map((mg: MasterGoal) => (
+                              <SortableRow key={mg.id} id={`t:${mg.id}`}>
+                                <Card className="rounded-xl border border-border shadow-none hover:shadow-soft transition-shadow group relative">
                                   <CardContent className="p-3 space-y-2">
                                     <div className="flex justify-between items-start gap-2">
                                       <div className="flex items-start gap-1 flex-1 pt-1">
                                         <DragHandle />
-                                        <h4 className="font-bold text-sm text-foreground leading-tight flex-1" title={mg.title}>{mg.title}</h4>
+                                        <h4
+                                          className="font-bold text-sm text-foreground leading-tight flex-1"
+                                          title={mg.title}
+                                        >
+                                          {mg.title}
+                                        </h4>
                                       </div>
                                       <div className="flex items-center gap-1 shrink-0">
-                                        <div className="bg-primary/10 px-2 py-1 rounded-lg text-xs font-black text-primary">+{mg.points ?? 0}</div>
+                                        <div className="bg-primary/10 px-2 py-1 rounded-lg text-xs font-black text-primary">
+                                          +{mg.points ?? 0}
+                                        </div>
                                         <SimpleMenu
                                           options={[
-                                            { label: "Edit", onClick: () => { setEditGoalData(mg); setGoalDefaultCategoryId(mg.categoryId || catId); setGoalModalOpen(true); }, icon: <Edit2 className="w-4 h-4 text-muted-foreground" /> },
-                                            { label: "Delete", onClick: () => setDeleteGoalConfirm(mg), icon: <Trash2 className="w-4 h-4 text-destructive/70" />, variant: "destructive" as const },
+                                            {
+                                              label: "Edit",
+                                              onClick: () => {
+                                                setEditGoalData(mg);
+                                                setGoalDefaultCategoryId(
+                                                  mg.categoryId || catId,
+                                                );
+                                                setGoalModalOpen(true);
+                                              },
+                                              icon: (
+                                                <Edit2 className="w-4 h-4 text-muted-foreground" />
+                                              ),
+                                            },
+                                            {
+                                              label: "Delete",
+                                              onClick: () =>
+                                                setDeleteGoalConfirm(mg),
+                                              icon: (
+                                                <Trash2 className="w-4 h-4 text-destructive/70" />
+                                              ),
+                                              variant: "destructive" as const,
+                                            },
                                           ]}
                                         />
                                       </div>
                                     </div>
                                     {mg.description && (
-                                      <p className="text-xs text-muted-foreground italic leading-relaxed line-clamp-2" title={mg.description}>{mg.description}</p>
+                                      <p
+                                        className="text-xs text-muted-foreground italic leading-relaxed line-clamp-2"
+                                        title={mg.description}
+                                      >
+                                        {mg.description}
+                                      </p>
                                     )}
                                   </CardContent>
                                 </Card>
-                              );
-                            }}
-                          </SortableList>
-                        </div>
-                      )}
+                              </SortableRow>
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </GoalGridDropZone>
                     </CardContent>
                   </motion.div>
                 )}
@@ -583,15 +883,27 @@ export function AdminGoalsTab({
 // Categories (sortable AND cross-group movable). Goals render their own
 // SortableList inside each category, fully isolated.
 // ---------------------------------------------------------------------------
-type CatMoveFn = (catId: string, destGroupId: string, destIndex: number) => Promise<void> | void;
+type CatMoveFn = (
+  catId: string,
+  destGroupId: string,
+  destIndex: number,
+) => Promise<void> | void;
+type GoalMoveFn = (
+  goalId: string,
+  destCategoryId: string,
+  destIndex: number,
+) => Promise<void> | void;
 
 function UnifiedHierarchyDnd({
   tree,
   groups,
   categories,
+  masterGoals,
   persistGroupOrder,
   persistCategoryOrder,
+  persistGoalOrder,
   moveCategoryToGroup,
+  moveGoalToCategory,
   renderGroupHeader,
   renderGroupBody,
   renderCategory,
@@ -601,12 +913,25 @@ function UnifiedHierarchyDnd({
   tree: HierarchyGroupNode[];
   groups: Group[];
   categories: Category[];
+  masterGoals: MasterGoal[];
   persistGroupOrder: (next: { id: string }[]) => Promise<void> | void;
-  persistCategoryOrder: (groupId: string, next: { id: string }[]) => Promise<void> | void;
+  persistCategoryOrder: (
+    groupId: string,
+    next: { id: string }[],
+  ) => Promise<void> | void;
+  persistGoalOrder: (
+    categoryId: string,
+    next: { id: string }[],
+  ) => Promise<void> | void;
   moveCategoryToGroup: CatMoveFn;
+  moveGoalToCategory: GoalMoveFn;
   renderGroupHeader: (node: HierarchyGroupNode, gi: number) => React.ReactNode;
   renderGroupBody: (node: HierarchyGroupNode) => React.ReactNode;
-  renderCategory: (node: HierarchyGroupNode, catNode: HierarchyGroupNode["categories"][number], ci: number) => React.ReactNode;
+  renderCategory: (
+    node: HierarchyGroupNode,
+    catNode: HierarchyGroupNode["categories"][number],
+    ci: number,
+  ) => React.ReactNode;
   isGroupExpanded: (id: string) => boolean;
   toggleGroup: (id: string) => void;
 }) {
@@ -615,19 +940,35 @@ function UnifiedHierarchyDnd({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   const catIdToGroupId = React.useMemo(() => {
     const m = new Map<string, string>();
-    localTree.forEach((g) => g.categories.forEach((c) => m.set(c.category.id, g.group.id)));
+    localTree.forEach((g) =>
+      g.categories.forEach((c) => m.set(c.category.id, g.group.id)),
+    );
+    return m;
+  }, [localTree]);
+
+  const goalIdToCatId = React.useMemo(() => {
+    const m = new Map<string, string>();
+    localTree.forEach((g) =>
+      g.categories.forEach((c) =>
+        c.goals.forEach((goal) => m.set(goal.id, c.category.id)),
+      ),
+    );
     return m;
   }, [localTree]);
 
   const gid = (id: string) => `g:${id}`;
   const cid = (id: string) => `c:${id}`;
+  const tid = (id: string) => `t:${id}`;
   const isGroupId = (id: string) => id.startsWith("g:");
   const isCatId = (id: string) => id.startsWith("c:");
+  const isGoalId = (id: string) => id.startsWith("t:");
   const stripPrefix = (id: string) => id.slice(2);
 
   const handleDragEnd = async (e: DragEndEvent) => {
@@ -636,6 +977,75 @@ function UnifiedHierarchyDnd({
     const aId = String(active.id);
     const oId = String(over.id);
     if (aId === oId) return;
+
+    // ---- GOAL DRAG (cross-category supported) ----------------------------
+    if (isGoalId(aId)) {
+      const goalRaw = stripPrefix(aId);
+      const srcCat = goalIdToCatId.get(goalRaw);
+      if (!srcCat) return;
+
+      let destCat: string | undefined;
+      let destIndex = 0;
+      if (isGoalId(oId)) {
+        destCat = goalIdToCatId.get(stripPrefix(oId));
+        if (!destCat) return;
+        const sib =
+          localTree
+            .flatMap((g) => g.categories)
+            .find((c) => c.category.id === destCat)?.goals || [];
+        destIndex = sib.findIndex((g) => g.id === stripPrefix(oId));
+        if (destIndex < 0) destIndex = sib.length;
+      } else if (oId.startsWith("gdrop:")) {
+        destCat = oId.slice(6);
+        const sib =
+          localTree
+            .flatMap((g) => g.categories)
+            .find((c) => c.category.id === destCat)?.goals || [];
+        destIndex = sib.length;
+      } else if (isCatId(oId)) {
+        destCat = stripPrefix(oId);
+        const sib =
+          localTree
+            .flatMap((g) => g.categories)
+            .find((c) => c.category.id === destCat)?.goals || [];
+        destIndex = sib.length;
+      }
+      if (!destCat) return;
+
+      setLocalTree((prev) => {
+        const copy = prev.map((g) => ({
+          ...g,
+          categories: g.categories.map((c) => ({ ...c, goals: [...c.goals] })),
+        }));
+        const allCats = copy.flatMap((g) => g.categories);
+        const sc = allCats.find((c) => c.category.id === srcCat);
+        const dc = allCats.find((c) => c.category.id === destCat);
+        if (!sc || !dc) return prev;
+        const idx = sc.goals.findIndex((g) => g.id === goalRaw);
+        if (idx < 0) return prev;
+        const [moved] = sc.goals.splice(idx, 1);
+        const insertAt = Math.min(destIndex, dc.goals.length);
+        dc.goals.splice(insertAt, 0, moved);
+        return copy;
+      });
+
+      if (srcCat === destCat) {
+        const list =
+          localTree
+            .flatMap((g) => g.categories)
+            .find((c) => c.category.id === srcCat)?.goals || [];
+        const ids = list.map((g) => g.id);
+        const oldIdx = ids.indexOf(goalRaw);
+        const next = arrayMove(ids, oldIdx, destIndex);
+        await persistGoalOrder(
+          srcCat,
+          next.map((id) => ({ id })),
+        );
+      } else {
+        await moveGoalToCategory(goalRaw, destCat, destIndex);
+      }
+      return;
+    }
 
     if (isGroupId(aId) && isGroupId(oId)) {
       const ids = localTree.map((g) => g.group.id);
@@ -660,15 +1070,23 @@ function UnifiedHierarchyDnd({
       if (isCatId(oId)) {
         destGroup = catIdToGroupId.get(stripPrefix(oId));
         if (!destGroup) return;
-        const destSiblings = localTree.find((g) => g.group.id === destGroup)!.categories;
-        destIndex = destSiblings.findIndex((c) => c.category.id === stripPrefix(oId));
+        const destSiblings = localTree.find(
+          (g) => g.group.id === destGroup,
+        )!.categories;
+        destIndex = destSiblings.findIndex(
+          (c) => c.category.id === stripPrefix(oId),
+        );
         if (destIndex < 0) destIndex = destSiblings.length;
       } else if (oId.startsWith("drop:")) {
         destGroup = oId.slice(5);
-        destIndex = localTree.find((g) => g.group.id === destGroup)?.categories.length ?? 0;
+        destIndex =
+          localTree.find((g) => g.group.id === destGroup)?.categories.length ??
+          0;
       } else if (isGroupId(oId)) {
         destGroup = stripPrefix(oId);
-        destIndex = localTree.find((g) => g.group.id === destGroup)?.categories.length ?? 0;
+        destIndex =
+          localTree.find((g) => g.group.id === destGroup)?.categories.length ??
+          0;
       }
       if (!destGroup) return;
 
@@ -689,7 +1107,10 @@ function UnifiedHierarchyDnd({
         const ids = g.categories.map((c) => c.category.id);
         const oldIdx = ids.indexOf(catRaw);
         const next = arrayMove(ids, oldIdx, destIndex);
-        await persistCategoryOrder(srcGroup, next.map((id) => ({ id })));
+        await persistCategoryOrder(
+          srcGroup,
+          next.map((id) => ({ id })),
+        );
       } else {
         await moveCategoryToGroup(catRaw, destGroup, destIndex);
       }
@@ -697,7 +1118,11 @@ function UnifiedHierarchyDnd({
   };
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragEnd={handleDragEnd}
+    >
       <div className="space-y-4">
         {localTree.length === 0 && (
           <Card className="rounded-xl p-8 text-center border-dashed">
@@ -707,7 +1132,9 @@ function UnifiedHierarchyDnd({
           </Card>
         )}
         <SortableContext
-          items={localTree.filter((n) => !n.group.isSystem).map((n) => gid(n.group.id))}
+          items={localTree
+            .filter((n) => !n.group.isSystem)
+            .map((n) => gid(n.group.id))}
           strategy={verticalListSortingStrategy}
         >
           {localTree.map((node, gi) => {
@@ -737,12 +1164,15 @@ function UnifiedHierarchyDnd({
                           isEmpty={node.categories.length === 0}
                         >
                           <SortableContext
-                            items={node.categories.map((c) => cid(c.category.id))}
+                            items={node.categories.map((c) =>
+                              cid(c.category.id),
+                            )}
                             strategy={verticalListSortingStrategy}
                           >
                             <div className="space-y-2">
                               {node.categories.map((catNode, ci) => {
-                                const isFallbackCat = catNode.category.id === FALLBACK_CATEGORY_ID;
+                                const isFallbackCat =
+                                  catNode.category.id === FALLBACK_CATEGORY_ID;
                                 if (isFallbackCat) {
                                   return (
                                     <React.Fragment key={catNode.category.id}>
@@ -751,7 +1181,10 @@ function UnifiedHierarchyDnd({
                                   );
                                 }
                                 return (
-                                  <SortableRow key={catNode.category.id} id={cid(catNode.category.id)}>
+                                  <SortableRow
+                                    key={catNode.category.id}
+                                    id={cid(catNode.category.id)}
+                                  >
                                     {renderCategory(node, catNode, ci)}
                                   </SortableRow>
                                 );
@@ -766,7 +1199,10 @@ function UnifiedHierarchyDnd({
               </Card>
             );
 
-            if (isSystem) return <React.Fragment key={node.group.id}>{inner}</React.Fragment>;
+            if (isSystem)
+              return (
+                <React.Fragment key={node.group.id}>{inner}</React.Fragment>
+              );
             return (
               <SortableRow key={node.group.id} id={gid(node.group.id)}>
                 {inner}
@@ -794,8 +1230,12 @@ function GroupCategoryDropZone({
       ref={setNodeRef}
       className={
         "rounded-xl transition-colors " +
-        (isOver ? "bg-primary/5 ring-2 ring-primary/40 ring-offset-2 ring-offset-background " : "") +
-        (isEmpty ? "min-h-[60px] border-2 border-dashed border-border/60 p-2" : "")
+        (isOver
+          ? "bg-primary/5 ring-2 ring-primary/40 ring-offset-2 ring-offset-background "
+          : "") +
+        (isEmpty
+          ? "min-h-[60px] border-2 border-dashed border-border/60 p-2"
+          : "")
       }
     >
       {isEmpty ? (
@@ -809,7 +1249,39 @@ function GroupCategoryDropZone({
   );
 }
 
-// ---- GROUP MODAL ---------------------------------------------------------
+function GoalGridDropZone({
+  categoryId,
+  isEmpty,
+  children,
+}: {
+  categoryId: string;
+  isEmpty: boolean;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `gdrop:${categoryId}` });
+  return (
+    <div
+      ref={setNodeRef}
+      className={
+        "rounded-xl transition-colors " +
+        (isOver
+          ? "bg-primary/5 ring-2 ring-primary/40 ring-offset-2 ring-offset-background "
+          : "") +
+        (isEmpty
+          ? "min-h-[80px] border-2 border-dashed border-border/60 p-3 mt-3"
+          : "")
+      }
+    >
+      {isEmpty ? (
+        <p className="text-xs text-muted-foreground italic text-center py-4">
+          Tidak ada tugas di kategori ini. Seret tugas ke sini.
+        </p>
+      ) : (
+        children
+      )}
+    </div>
+  );
+}
 function GroupAdminModal({
   group,
   onClose,
@@ -825,14 +1297,20 @@ function GroupAdminModal({
     <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[60] flex justify-center items-center p-4">
       <Card className="w-full max-w-md rounded-xl shadow-2xl border-border bg-card">
         <CardHeader className="p-6 border-b border-border">
-          <div className="font-black text-lg">{group ? "Edit Grup" : "Grup Baru"}</div>
+          <div className="font-black text-lg">
+            {group ? "Edit Grup" : "Grup Baru"}
+          </div>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
           <div>
             <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
               Nama
             </label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-11" />
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-11"
+            />
           </div>
           <div>
             <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
@@ -851,7 +1329,9 @@ function GroupAdminModal({
             Batal
           </Button>
           <Button
-            onClick={() => onSave({ ...(group ?? { id: "", isSystem: false }), name, order })}
+            onClick={() =>
+              onSave({ ...(group ?? { id: "", isSystem: false }), name, order })
+            }
             className="rounded-xl h-11 shadow-primary-glow"
           >
             Simpan
@@ -881,10 +1361,15 @@ function GoalAdminModal({
   const initialCat =
     categories.find((c) => c.id === (goal?.categoryId || defaultCategoryId)) ||
     categories.find(
-      (c) => c.name && goal?.categoryName && c.name.toLowerCase() === goal.categoryName.toLowerCase(),
+      (c) =>
+        c.name &&
+        goal?.categoryName &&
+        c.name.toLowerCase() === goal.categoryName.toLowerCase(),
     ) ||
     categories[0];
-  const [groupId, setGroupId] = useState<string>(initialCat?.groupId || groups[0]?.id || "");
+  const [groupId, setGroupId] = useState<string>(
+    initialCat?.groupId || groups[0]?.id || "",
+  );
   const [categoryId, setCategoryId] = useState<string>(initialCat?.id || "");
 
   const filteredCats = useMemo(
@@ -928,7 +1413,9 @@ function GoalAdminModal({
             <Input
               required
               value={formData.title}
-              onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))}
+              onChange={(e) =>
+                setFormData((p) => ({ ...p, title: e.target.value }))
+              }
               className="h-11"
             />
           </div>
@@ -941,10 +1428,15 @@ function GoalAdminModal({
                 value={groupId}
                 onValueChange={(v) => {
                   setGroupId(v);
-                  const first = sortByOrder(categories.filter((c) => c.groupId === v))[0];
+                  const first = sortByOrder(
+                    categories.filter((c) => c.groupId === v),
+                  )[0];
                   if (first) handleCategoryChange(first.id);
                 }}
-                options={sortByOrder(groups).map((g) => ({ value: g.id, label: g.name }))}
+                options={sortByOrder(groups).map((g) => ({
+                  value: g.id,
+                  label: g.name,
+                }))}
                 placeholder="Pilih Grup"
                 className="h-11 w-full"
               />
@@ -956,7 +1448,10 @@ function GoalAdminModal({
               <PopoverSelect
                 value={categoryId}
                 onValueChange={handleCategoryChange}
-                options={filteredCats.map((c) => ({ value: c.id, label: c.name }))}
+                options={filteredCats.map((c) => ({
+                  value: c.id,
+                  label: c.name,
+                }))}
                 placeholder="Pilih Kategori"
                 className="h-11 w-full"
               />
@@ -972,7 +1467,10 @@ function GoalAdminModal({
                 min="1"
                 value={String(formData.points)}
                 onChange={(e) =>
-                  setFormData((p) => ({ ...p, points: parseInt(e.target.value) || 0 }))
+                  setFormData((p) => ({
+                    ...p,
+                    points: parseInt(e.target.value) || 0,
+                  }))
                 }
                 className="h-11"
               />
@@ -985,7 +1483,10 @@ function GoalAdminModal({
                 type="number"
                 value={String(formData.order ?? 0)}
                 onChange={(e) =>
-                  setFormData((p) => ({ ...p, order: parseInt(e.target.value) || 0 }))
+                  setFormData((p) => ({
+                    ...p,
+                    order: parseInt(e.target.value) || 0,
+                  }))
                 }
                 className="h-11"
               />
@@ -999,12 +1500,18 @@ function GoalAdminModal({
               rows={3}
               className="w-full bg-secondary/30 border border-border rounded-xl p-3 text-sm font-medium focus:ring-2 focus:ring-primary/50 outline-none resize-none"
               value={formData.description}
-              onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))}
+              onChange={(e) =>
+                setFormData((p) => ({ ...p, description: e.target.value }))
+              }
             />
           </div>
         </CardContent>
         <div className="p-6 border-t border-border bg-secondary/20 flex justify-end gap-3">
-          <Button variant="ghost" onClick={onClose} className="rounded-xl h-11 font-bold">
+          <Button
+            variant="ghost"
+            onClick={onClose}
+            className="rounded-xl h-11 font-bold"
+          >
             Batal
           </Button>
           <Button

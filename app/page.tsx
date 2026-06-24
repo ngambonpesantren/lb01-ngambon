@@ -1,7 +1,7 @@
-import { LandingPage } from "@/components/pages/LandingPage";
+"use client";
 
-// Phase D: ISR — revalidate landing every 10 minutes.
-export const revalidate = 600;
+import dynamic from "next/dynamic";
+const LandingPage = dynamic(() => import("@/components/pages/LandingPage").then(mod => mod.LandingPage), { ssr: false });
 
 export default function Page() {
   return <LandingPage />;

@@ -32,8 +32,11 @@ import {
   CalendarIcon,
 } from "lucide-react";
 import { ImageUploader } from "../ui/ImageUploader";
+import { deleteByPath } from "../../lib/storage";
 import { motion, AnimatePresence } from "framer-motion";
-import { StudentsAPI, AdminUsersAPI } from "@/hooks/queries";
+import { apiFetch } from "../../lib/api";
+import { mergeAssignments, dedupeAssignments } from "../../lib/assignGoals";
+import { useUpdateStudentMutation } from "../../hooks/useAppQueries";
 import { Avatar } from "../ui/custom-avatar";
 import { StudentSearchFilter } from "../StudentSearchFilter";
 import {
@@ -47,6 +50,7 @@ import {
   SortKey,
 } from "../StudentSortDropdown";
 import { dicebearAvatar } from "../ImageFallback";
+import { parseGDriveUrl, isGDriveUrl } from "@/lib/gdrive";
 import { ConfirmModal } from "../ui/ConfirmModal";
 import type {
   Category,
@@ -63,7 +67,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SimpleMenu } from "../ui/SimpleMenu";
-import { ArrowUpDown } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -94,10 +97,7 @@ import { useAuthRole } from "@/hooks/useAuthRole";
 import { cn } from "@/lib/utils";
 import { ChevronDown, Check, Layers } from "lucide-react";
 import type { StudentAchievement } from "@/lib/types";
-import {
-  buildHierarchy,
-  sortByOrder,
-} from "@/lib/hierarchy";
+import { buildHierarchy, sortByOrder } from "@/lib/hierarchy";
 
 // ---------------------------------------------------------------------------
 // Inline collapsible audit card — replaces the legacy CompletionAuditPanel.
@@ -247,7 +247,7 @@ function GoalAuditCard({
         </button>
 
         <div className="flex gap-2 shrink-0">
-          <button
+          {/* <button
             type="button"
             onClick={onToggleAssign}
             className={`p-2 rounded-xl transition-all ${assigned ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}
@@ -258,7 +258,7 @@ function GoalAuditCard({
             ) : (
               <Square className="w-5 h-5" />
             )}
-          </button>
+          </button> */}
         </div>
       </div>
 
@@ -320,7 +320,10 @@ function GoalAuditCard({
                       <PopoverSelect
                         value={markerId}
                         onValueChange={setMarkerId}
-                        options={adminOptions.map((a) => ({ value: a.id, label: a.name }))}
+                        options={adminOptions.map((a) => ({
+                          value: a.id,
+                          label: a.name,
+                        }))}
                         placeholder="Pilih admin"
                         className="h-10"
                       />
@@ -384,8 +387,7 @@ export function AdminStudentsTab({
 
   const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
   const [bulkDeleteIds, setBulkDeleteIds] = useState<string[] | null>(null);
-  const upsertStudent = StudentsAPI.useUpsert();
-  const deleteStudent = StudentsAPI.useDelete();
+  const updateStudentMutation = useUpdateStudentMutation();
 
   const studentsList = Array.isArray(students) ? students : [];
   const availableTags = useMemo(() => {
@@ -428,10 +430,21 @@ export function AdminStudentsTab({
     }
 
     try {
-      await upsertStudent.mutateAsync({
-        id: formData.id || undefined,
+      await updateStudentMutation.mutateAsync({
+        id: formData.id,
         data: finalData,
       });
+      // Best-effort cleanup of the previous Storage avatar when it was replaced.
+      if (!isNew) {
+        const prev = studentsList.find((s) => s.id === formData.id);
+        if (
+          prev?.photoPath &&
+          prev.photoPath !== finalData.photoPath &&
+          prev.photoPath.startsWith("avatars/")
+        ) {
+          deleteByPath(prev.photoPath);
+        }
+      }
       refreshData();
       setModalOpen(false);
       alert("Data Santri berhasil disimpan!");
@@ -442,13 +455,12 @@ export function AdminStudentsTab({
 
   const executeDelete = async () => {
     if (!deleteConfirm) return;
-    try {
-      await deleteStudent.mutateAsync(deleteConfirm.id);
-      setDeleteConfirm(null);
-      refreshData();
-    } catch(err: any){
-      alert(`Failed to delete: ${err.message}`);
-    }
+    const res = await apiFetch(`/api/students/${deleteConfirm.id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) alert(`Failed to delete: ${res.statusText}`);
+    setDeleteConfirm(null);
+    refreshData();
   };
 
   const handleBulkDelete = async () => {
@@ -456,7 +468,7 @@ export function AdminStudentsTab({
     try {
       await Promise.all(
         bulkDeleteIds.map((id) =>
-          deleteStudent.mutateAsync(id)
+          apiFetch(`/api/students/${id}`, { method: "DELETE" }),
         ),
       );
       setBulkDeleteIds(null);
@@ -493,18 +505,7 @@ export function AdminStudentsTab({
     },
     {
       accessorKey: "name",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="hover:bg-transparent px-0 font-medium text-muted-foreground"
-          >
-            Student
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
+      header: "Student",
       cell: ({ row }) => {
         const student = row.original;
         return (
@@ -658,6 +659,109 @@ export function AdminStudentsTab({
   );
 }
 
+type PhotoSource = "upload" | "gdrive";
+
+function PhotoSourcePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (url: string) => void;
+}) {
+  const initialMode: PhotoSource = isGDriveUrl(value) ? "gdrive" : "upload";
+  const [mode, setMode] = useState<PhotoSource>(initialMode);
+  const [draft, setDraft] = useState(initialMode === "gdrive" ? value : "");
+  const parsedId = parseGDriveUrl(draft);
+  const invalid = draft.trim().length > 0 && !parsedId;
+
+  return (
+    <div>
+      <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
+        Sumber Foto
+      </label>
+      <div className="inline-flex rounded-xl bg-secondary p-2 mb-3 w-full">
+        <button
+          type="button"
+          onClick={() => setMode("upload")}
+          className={cn(
+            "flex-1 px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all",
+            mode === "upload"
+              ? "bg-card shadow-sm text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Upload File
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("gdrive")}
+          className={cn(
+            "flex-1 px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all",
+            mode === "gdrive"
+              ? "bg-card shadow-sm text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Google Drive
+        </button>
+      </div>
+
+      {mode === "upload" ? (
+        <div>
+          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
+            Photo URL (Optional)
+          </label>
+          <input
+            type="text"
+            className="w-full bg-secondary border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/50"
+            placeholder="Paste image URL here"
+            value={isGDriveUrl(value) ? "" : value}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <p className="text-[10px] text-muted-foreground mt-2">
+            Atau gunakan tombol kamera di foto profil untuk mengunggah file.
+          </p>
+        </div>
+      ) : (
+        <div>
+          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
+            Google Drive Link
+          </label>
+          <input
+            type="text"
+            className={cn(
+              "w-full bg-secondary border rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/50",
+              invalid ? "border-destructive/60" : "border-transparent",
+            )}
+            placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+            value={draft}
+            onChange={(e) => {
+              const next = e.target.value;
+              setDraft(next);
+              if (next.trim() === "") {
+                onChange("");
+              } else if (parseGDriveUrl(next)) {
+                onChange(next.trim());
+              }
+            }}
+          />
+          {invalid ? (
+            <p className="text-[10px] text-destructive mt-2">
+              Tidak dapat mengenali File ID dari link tersebut.
+            </p>
+          ) : (
+            <p className="text-[10px] text-muted-foreground mt-2">
+              Pastikan permission file Drive diatur ke{" "}
+              <span className="font-bold">“Anyone with the link can view”</span>{" "}
+              agar gambar dapat ditampilkan.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Student Edit Modal (Shared with initial but updated styles)
 function StudentAdminModal({
   student,
@@ -674,14 +778,14 @@ function StudentAdminModal({
     photo:
       student?.photo ||
       dicebearAvatar(student?.name || student?.id || "student"),
+    photoPath: student?.photoPath || "",
     tags: student?.tags ? [...student.tags] : [],
     assignedGoals: student?.assignedGoals ? [...student.assignedGoals] : [],
   });
 
   const [tagInput, setTagInput] = useState("");
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const [groupPickerOpen, setGroupPickerOpen] = useState(false);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [bulkConfirm, setBulkConfirm] = useState<{
     kind: "assign" | "unassign" | "complete" | "uncomplete";
     title: string;
@@ -722,25 +826,32 @@ function StudentAdminModal({
     }
   }, [activeGroupNode, selectedGroupId]);
   const activeCategories = activeGroupNode?.categories ?? [];
-  const activeCategoryNode = useMemo(() => {
-    if (!activeCategories.length) return null;
-    return (
-      activeCategories.find((c) => c.category.id === selectedCategoryId) ??
-      activeCategories[0]
-    );
-  }, [activeCategories, selectedCategoryId]);
-  useEffect(() => {
-    if (
-      activeCategoryNode &&
-      activeCategoryNode.category.id !== selectedCategoryId
-    ) {
-      setSelectedCategoryId(activeCategoryNode.category.id);
-    }
-  }, [activeCategoryNode, selectedCategoryId]);
+  // Multi-select: empty = all categories in the active group
+  const effectiveCategoryIds = useMemo(() => {
+    if (selectedCategoryIds.length === 0)
+      return activeCategories.map((c) => c.category.id);
+    const valid = new Set(activeCategories.map((c) => c.category.id));
+    return selectedCategoryIds.filter((id) => valid.has(id));
+  }, [selectedCategoryIds, activeCategories]);
+  const activeCategoryNodes = useMemo(
+    () =>
+      activeCategories.filter((c) =>
+        effectiveCategoryIds.includes(c.category.id),
+      ),
+    [activeCategories, effectiveCategoryIds],
+  );
   // Flat list of goals visible after filter — drives bulk-action helpers below.
   const displayedMasterGoals: MasterGoal[] = useMemo(
-    () => activeCategoryNode?.goals ?? [],
-    [activeCategoryNode],
+    () => activeCategoryNodes.flatMap((c) => c.goals),
+    [activeCategoryNodes],
+  );
+  // All goals across all groups/categories — for the global bulk-assign action.
+  const allGoalIds: string[] = useMemo(
+    () =>
+      tree.flatMap((g) =>
+        g.categories.flatMap((c) => c.goals.map((x) => x.id)),
+      ),
+    [tree],
   );
 
   const isAssigned = (goalId: string) =>
@@ -749,17 +860,30 @@ function StudentAdminModal({
     formData.assignedGoals.find((ag) => ag.goalId === goalId)?.completed ||
     false;
 
-  // Fetch admin list for the marker dropdown.
+  // Fetch admin list for the marker dropdown (graceful failure → empty list).
   const { user } = useAuthRole();
-  const { data: adminList } = AdminUsersAPI.useList();
-  
-  const admins = useMemo(() => {
-    const list = adminList || [];
-    return list.map((a: any) => ({
-      id: a.id,
-      name: a.full_name || a.email || "Admin",
-    }));
-  }, [adminList]);
+  const [admins, setAdmins] = useState<AdminOption[]>([]);
+  useEffect(() => {
+    let active = true;
+    apiFetch("/api/admin_users")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!active || !data) return;
+        const list = Array.isArray(data)
+          ? data
+          : data.users || data.admins || [];
+        setAdmins(
+          list.map((a: any) => ({
+            id: a.id,
+            name: a.full_name || a.email || "Admin",
+          })),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
   const currentAdmin: AdminOption = useMemo(
     () => ({
       id: user?.id || "self",
@@ -850,7 +974,14 @@ function StudentAdminModal({
   const allVisibleCompleted =
     visibleAssignedCount > 0 && visibleCompletedCount === visibleAssignedCount;
   const activeGroupName = activeGroupNode?.group.name ?? "—";
-  const activeCategoryName = activeCategoryNode?.category.name ?? "—";
+  const activeCategoryName =
+    activeCategoryNodes.length === 0
+      ? "—"
+      : activeCategoryNodes.length === 1
+        ? activeCategoryNodes[0].category.name
+        : selectedCategoryIds.length === 0
+          ? `Semua kategori (${activeCategoryNodes.length})`
+          : `${activeCategoryNodes.length} kategori`;
   const scopeLabel = activeCategoryName;
   const studentLabel = formData.name?.trim() || "this student";
 
@@ -909,20 +1040,16 @@ function StudentAdminModal({
   const bulkSetAssigned = (assign: boolean) => {
     setFormData((prev) => {
       if (assign) {
-        const existingIds = new Set(prev.assignedGoals.map((ag) => ag.goalId));
-        const additions = visibleGoalIds
-          .filter((id) => !existingIds.has(id))
-          .map((id) => ({ goalId: id, completed: false }));
-        if (additions.length === 0) return prev;
-        return {
-          ...prev,
-          assignedGoals: [...prev.assignedGoals, ...additions],
-        };
+        const merged = mergeAssignments(prev.assignedGoals, visibleGoalIds);
+        if (merged.length === prev.assignedGoals.length) return prev;
+        return { ...prev, assignedGoals: merged };
       }
       const drop = new Set(visibleGoalIds);
       return {
         ...prev,
-        assignedGoals: prev.assignedGoals.filter((ag) => !drop.has(ag.goalId)),
+        assignedGoals: dedupeAssignments(prev.assignedGoals).filter(
+          (ag) => !drop.has(ag.goalId),
+        ),
       };
     });
   };
@@ -959,6 +1086,43 @@ function StudentAdminModal({
     setBusy(false);
   };
 
+  // 1. Buat dua ref untuk masing-masing container horizontal scroll
+  const groupTabsRef = useRef<HTMLDivElement>(null);
+  const categoryTabsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const groupContainer = groupTabsRef.current;
+    const categoryContainer = categoryTabsRef.current;
+
+    // 2. Fungsi wheel handler yang berlaku universal
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        // TypeScript type assertion karena kita tahu e.currentTarget adalah elemen div
+        const container = e.currentTarget as HTMLDivElement;
+        container.scrollLeft += e.deltaY;
+      }
+    };
+
+    // 3. Pasang event listener dengan passive: false
+    if (groupContainer) {
+      groupContainer.addEventListener("wheel", handleWheel, { passive: false });
+    }
+    if (categoryContainer) {
+      categoryContainer.addEventListener("wheel", handleWheel, {
+        passive: false,
+      });
+    }
+
+    // 4. Bersihkan event listener saat komponen unmount
+    return () => {
+      if (groupContainer)
+        groupContainer.removeEventListener("wheel", handleWheel);
+      if (categoryContainer)
+        categoryContainer.removeEventListener("wheel", handleWheel);
+    };
+  }, [tree, activeCategories]); // Re-bind jika data tree/categories berubah secara dinamis
+
   return (
     <div className="fixed inset-0 bg-base-900/60 backdrop-blur-md z-[60] flex justify-center items-center p-4">
       <motion.div
@@ -991,9 +1155,14 @@ function StudentAdminModal({
                 />
                 <ImageUploader
                   folder="avatars"
+                  ownerId={formData.id || undefined}
                   aspectRatio={1}
-                  onUploadSuccess={(url) =>
-                    setFormData((prev) => ({ ...prev, photo: url }))
+                  onUploadSuccess={(url, meta) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      photo: url,
+                      photoPath: meta?.path || "",
+                    }))
                   }
                   trigger={
                     <button
@@ -1013,6 +1182,7 @@ function StudentAdminModal({
                       setFormData((p) => ({
                         ...p,
                         photo: `https://api.dicebear.com/7.x/bottts/svg?seed=${Math.floor(Math.random() * 1000)}&backgroundColor=d1d4f9`,
+                        photoPath: "",
                       }))
                     }
                     className="bg-primary/10 text-primary px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all"
@@ -1025,6 +1195,7 @@ function StudentAdminModal({
                       setFormData((p) => ({
                         ...p,
                         photo: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || "S")}&background=random`,
+                        photoPath: "",
                       }))
                     }
                     className="bg-primary/10 text-primary px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all"
@@ -1037,6 +1208,7 @@ function StudentAdminModal({
                       setFormData((p) => ({
                         ...p,
                         photo: `https://api.dicebear.com/7.x/shapes/svg?seed=${Math.floor(Math.random() * 1000)}&backgroundColor=random`,
+                        photoPath: "",
                       }))
                     }
                     className="bg-primary/10 text-primary px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all"
@@ -1051,20 +1223,13 @@ function StudentAdminModal({
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
-                  Photo URL (Optional)
-                </label>
-                <input
-                  type="text"
-                  className="w-full bg-secondary border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/50"
-                  placeholder="Paste image URL here"
-                  value={formData.photo}
-                  onChange={(e) =>
-                    setFormData((p) => ({ ...p, photo: e.target.value }))
-                  }
-                />
-              </div>
+              <PhotoSourcePicker
+                value={formData.photo}
+                onChange={(url) =>
+                  setFormData((p) => ({ ...p, photo: url, photoPath: "" }))
+                }
+              />
+
               <div>
                 <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
                   Nama Lengkap
@@ -1126,7 +1291,7 @@ function StudentAdminModal({
             </div>
           </div>
 
-          {/* Goal Selector — flattened: Group (Combobox) → Category (Tabs) → Goals */}
+          {/* Goal Selector — Group tabs → Category tabs (multi-select) → Goals */}
           <div className="flex-1 border-border lg:border-l lg:pl-8 pt-8 lg:pt-0 min-w-0">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
               <div>
@@ -1137,149 +1302,158 @@ function StudentAdminModal({
                   Atur tugas untuk Santri ini
                 </p>
               </div>
-              {/* Group Combobox */}
-              <Popover open={groupPickerOpen} onOpenChange={setGroupPickerOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-2 bg-secondary rounded-xl h-10 px-4 text-xs font-bold text-foreground hover:bg-secondary/80 transition-colors min-w-[220px] justify-between"
-                  >
-                    <span className="inline-flex items-center gap-2 truncate">
-                      <Layers className="w-4 h-4 text-muted-foreground" />
-                      <span className="truncate">{activeGroupName}</span>
-                    </span>
-                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="p-0 w-[260px] z-[200]" align="end">
-                  <Command>
-                    <CommandInput placeholder="Cari grup..." />
-                    <CommandList>
-                      <CommandEmpty>Tidak ada grup.</CommandEmpty>
-                      <CommandGroup>
-                        {tree.map((node) => (
-                          <CommandItem
-                            key={node.group.id}
-                            value={node.group.name}
-                            onSelect={() => {
-                              setSelectedGroupId(node.group.id);
-                              setSelectedCategoryId(null);
-                              setGroupPickerOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                node.group.id === activeGroupNode?.group.id
-                                  ? "opacity-100"
-                                  : "opacity-0",
-                              )}
-                            />
-                            <span className="truncate">{node.group.name}</span>
-                            <span className="ml-auto text-[10px] font-bold text-muted-foreground">
-                              {node.categories.flatMap((c) => c.goals).length}
-                            </span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+              {/* Global assign-all-from-all-groups */}
+              {allGoalIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const count = allGoalIds.length;
+                    setBulkConfirm({
+                      kind: "assign",
+                      title: `Assign all ${count} goals from all groups?`,
+                      message: `Tugaskan SELURUH ${count} goals dari semua group dan category kepada ${studentLabel}? Goals yang sudah ditugaskan tidak akan diduplikasi.`,
+                      onConfirm: () => {
+                        setFormData((prev) => {
+                          const merged = mergeAssignments(
+                            prev.assignedGoals,
+                            allGoalIds,
+                          );
+                          if (merged.length === prev.assignedGoals.length) {
+                            return prev;
+                          }
+                          return { ...prev, assignedGoals: merged };
+                        });
+                        setBulkConfirm(null);
+                      },
+                    });
+                  }}
+                  className="inline-flex items-center gap-2 bg-primary text-primary-foreground rounded-xl h-10 px-4 text-xs font-black uppercase tracking-widest hover:bg-primary/90 transition-colors"
+                  title="Tugaskan semua goals dari semua group & category"
+                >
+                  <Layers className="w-4 h-4" />
+                  Tugaskan Semua (All Groups)
+                </button>
+              )}
             </div>
 
-            {/* Category chips (horizontal scroll) */}
-            {activeCategories.length > 0 && (
-              <div className="mb-4 -mx-1 px-1 overflow-x-auto scrollbar-hide">
-                <div className="flex gap-2 min-w-max pb-1">
-                  {activeCategories.map((catNode) => {
-                    const cid = catNode.category.id;
-                    const active = cid === activeCategoryNode?.category.id;
-                    const assignedCount = catNode.goals.filter((g) =>
-                      isAssigned(g.id),
-                    ).length;
-                    return (
-                      <button
-                        key={cid}
-                        type="button"
-                        onClick={() => setSelectedCategoryId(cid)}
-                        className={cn(
-                          "shrink-0 inline-flex items-center gap-2 px-4 h-9 rounded-full border text-xs font-bold whitespace-nowrap transition-all",
-                          active
-                            ? "bg-foreground text-background border-foreground"
-                            : "bg-background border-border text-foreground/70 hover:border-foreground",
-                        )}
-                      >
-                        <span>{catNode.category.name}</span>
-                        <span
+            {/* Group tabs */}
+            {tree.length > 0 && (
+              <div className="mb-3 w-full">
+                <div
+                  ref={groupTabsRef}
+                  className="scrollbar-hide flex flex-nowrap items-center overflow-x-auto select-none bg-card/95 backdrop-blur-sm rounded-xl border border-border p-2 shadow-soft w-ful"
+                  style={{
+                    scrollbarWidth: "none",
+                    WebkitOverflowScrolling: "touch",
+                  }}
+                >
+                  {/* PERBAIKAN: Ganti 'flex min-w-max' menjadi 'inline-flex' dan beri padding kanan */}
+                  <div className="inline-flex items-center gap-2 pr-4">
+                    {tree.map((node) => {
+                      const active =
+                        node.group.id === activeGroupNode?.group.id;
+                      const totalGoals = node.categories.flatMap(
+                        (c) => c.goals,
+                      ).length;
+                      return (
+                        <button
+                          key={node.group.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedGroupId(node.group.id);
+                            setSelectedCategoryIds([]);
+                          }}
                           className={cn(
-                            "text-[10px] font-black px-1.5 rounded-full",
+                            "shrink-0 inline-flex items-center gap-2 px-4 h-9 rounded-full border text-xs font-bold whitespace-nowrap transition-all",
                             active
-                              ? "bg-background/20"
-                              : "bg-secondary text-muted-foreground",
+                              ? "bg-foreground text-background border-foreground"
+                              : "bg-background border-border text-foreground/70 hover:border-foreground",
                           )}
                         >
-                          {assignedCount}/{catNode.goals.length}
-                        </span>
-                      </button>
-                    );
-                  })}
+                          <Layers className="w-3.5 h-3.5" />
+                          <span>{node.group.name}</span>
+                          <span
+                            className={cn(
+                              "text-[10px] font-black px-1.5 rounded-full",
+                              active
+                                ? "bg-background/20"
+                                : "bg-secondary text-muted-foreground",
+                            )}
+                          >
+                            {totalGoals}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Bulk actions for the current track scope */}
-            {visibleGoalIds.length > 0 && (
-              <div className="mb-4 p-3 rounded-2xl bg-secondary/30 border border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Pilih Semua di{" "}
-                  <span className="text-primary">{scopeLabel}</span>
-                  <span className="ml-2 normal-case tracking-normal font-bold text-muted-foreground">
-                    · {visibleAssignedCount}/{visibleGoalIds.length} assigned ·{" "}
-                    {visibleCompletedCount} completed
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => requestBulkAssigned(!allVisibleAssigned)}
-                    className={`inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-xl transition-all ${
-                      allVisibleAssigned
-                        ? "bg-secondary text-muted-foreground hover:bg-secondary/80"
-                        : "bg-primary text-primary-foreground hover:bg-primary/90"
-                    }`}
-                    title={
-                      allVisibleAssigned
-                        ? "Hapus semua yang terlihat"
-                        : "Tugaskan semua yang terlihat"
-                    }
-                  >
-                    {allVisibleAssigned ? (
-                      <Square className="w-4 h-4" />
-                    ) : (
-                      <CheckSquare className="w-4 h-4" />
-                    )}
-                    {allVisibleAssigned ? "Hapus Semua" : "Tugaskan Semua"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => requestBulkCompleted(!allVisibleCompleted)}
-                    className={`inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-xl transition-all ${
-                      allVisibleCompleted
-                        ? "bg-secondary text-muted-foreground hover:bg-secondary/80"
-                        : "bg-[var(--accent)] text-[var(--accent-foreground)] hover:brightness-95"
-                    }`}
-                    title={
-                      allVisibleCompleted
-                        ? "Batalkan Selesai"
-                        : "Tandai Selesai"
-                    }
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    {allVisibleCompleted
-                      ? "Batalkan Selesai Semua"
-                      : "Tandai Semua Selesai"}
-                  </button>
+            {/* Category tabs (multi-select) */}
+            {activeCategories.length > 0 && (
+              <div className="mb-4 w-full">
+                <div
+                  ref={categoryTabsRef}
+                  className="scrollbar-hide flex flex-nowrap items-center overflow-x-auto select-none bg-card/95 backdrop-blur-sm rounded-xl border border-border p-2 shadow-soft w-ful"
+                  style={{
+                    scrollbarWidth: "none",
+                    WebkitOverflowScrolling: "touch",
+                  }}
+                >
+                  {/* PERBAIKAN: Ganti 'flex min-w-max' menjadi 'inline-flex' dan beri padding kanan */}
+                  <div className="inline-flex items-center gap-2 pr-4">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCategoryIds([])}
+                      className={cn(
+                        "shrink-0 inline-flex items-center gap-2 px-4 h-9 rounded-full border text-xs font-bold whitespace-nowrap transition-all",
+                        selectedCategoryIds.length === 0
+                          ? "bg-foreground text-background border-foreground"
+                          : "bg-background border-border text-foreground/70 hover:border-foreground",
+                      )}
+                    >
+                      Semua
+                    </button>
+                    {activeCategories.map((catNode) => {
+                      const cid = catNode.category.id;
+                      const active = selectedCategoryIds.includes(cid);
+                      const assignedCount = catNode.goals.filter((g) =>
+                        isAssigned(g.id),
+                      ).length;
+                      return (
+                        <button
+                          key={cid}
+                          type="button"
+                          onClick={() =>
+                            setSelectedCategoryIds((prev) =>
+                              prev.includes(cid)
+                                ? prev.filter((x) => x !== cid)
+                                : [...prev, cid],
+                            )
+                          }
+                          className={cn(
+                            "shrink-0 inline-flex items-center gap-2 px-4 h-9 rounded-full border text-xs font-bold whitespace-nowrap transition-all",
+                            active
+                              ? "bg-foreground text-background border-foreground"
+                              : "bg-background border-border text-foreground/70 hover:border-foreground",
+                          )}
+                        >
+                          <span>{catNode.category.name}</span>
+                          <span
+                            className={cn(
+                              "text-[10px] font-black px-1.5 rounded-full",
+                              active
+                                ? "bg-background/20"
+                                : "bg-secondary text-muted-foreground",
+                            )}
+                          >
+                            {assignedCount}/{catNode.goals.length}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}

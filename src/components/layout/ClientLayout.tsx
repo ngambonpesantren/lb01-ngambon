@@ -10,8 +10,8 @@ import {
 } from "@/components/admin/AdminAppearanceTab";
 import { useAuthQuery, useAppDataQuery } from "@/hooks/useAppQueries";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
-import { removeLocalToken } from "@/lib/auth";
-import { setAnalyticsAdminFlag } from "@/lib/analytics";
+import { apiFetch, removeLocalToken } from "@/lib/api";
+import { trackEvent, setAnalyticsAdminFlag } from "@/lib/analytics";
 import { ImageFallback } from "@/components/ImageFallback";
 import { ScrollToTop } from "@/components/ui/ScrollToTop";
 import { FloatingSettingsFab } from "@/components/ui/FloatingSettingsFab";
@@ -39,12 +39,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
-
-  // Phase 2: Defer Firebase-dependent rendering until after client mount to
-  // eliminate SSR hydration mismatch (server has no Firebase access; client
-  // resolves auth/data asynchronously).
-  const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => { setIsMounted(true); }, []);
 
   const { data: authData, isLoading: isAuthLoading } = useAuthQuery();
   const { data: appData, isLoading: isAppDataLoading } = useAppDataQuery();
@@ -148,8 +142,8 @@ function AppContent({ children }: { children: React.ReactNode }) {
     window.addEventListener("auth-expired", handleAuthExpired);
 
     setAnalyticsAdminFlag(isAdmin);
-    // GA4 now handles page views and unique visitor tracking.
-    // Only keep admin flag for internal analytics events.
+    apiFetch("/api/track-visit", { method: "POST" }).catch(() => {});
+    trackEvent("page_view");
 
     return () => window.removeEventListener("auth-expired", handleAuthExpired);
   }, [isAdmin, queryClient, router]);
@@ -171,11 +165,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
     };
   }, [refreshData]);
 
-  // Phase 2: SSR returns null to guarantee no hydration mismatch. The first
-  // client paint also returns null, then mounts the real tree on the next
-  // commit. Loader is only shown after mount while data is loading.
-  if (!isMounted) return null;
-
   if (isAuthLoading || isLoading) {
     return (
       <div className="fixed inset-0 bg-background flex flex-col items-center justify-center z-50">
@@ -190,7 +179,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col pb-20 md:pb-0">
       {/* Navbar Global – Leaderboard | Logo (center) | Berita */}
-      <nav className="bg-background border-b border-border sticky top-0 z-40 shadow-soft hidden md:block">
+      <nav className="bg-background border-b border-border sticky top-0 z-40 shadow-soft hidden md:hidden">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="relative flex justify-between items-center h-20">
             {/* Left: Leaderboard */}
@@ -242,7 +231,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
       </main>
 
       {/* Floating Settings FAB – bottom-right, below ScrollToTop */}
-      <FloatingSettingsFab
+      {/* <FloatingSettingsFab
         themeMode={themeMode}
         toggleTheme={toggleTheme}
         activePresetId={
@@ -253,17 +242,17 @@ function AppContent({ children }: { children: React.ReactNode }) {
         cyclePreset={cyclePreset}
         activePresetName={activePresetName}
         isAdmin={isAdmin}
-      />
+      /> */}
 
       {/* Scroll to top – bottom-right, above FAB (with breathing room) */}
-      <div className="fixed bottom-40 md:bottom-18 right-4 z-50">
+      <div className="fixed bottom-20 md:bottom-5 right-4 z-50">
         <ScrollToTop />
       </div>
 
-      <PwaDownloadPrompt />
+      {/* <PwaDownloadPrompt /> */}
 
       {/* Mobile Bottom Nav – Leaderboard | Logo (absolute center) | Berita */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden z-50">
+      <nav className="hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden z-50">
         {/* Logo – absolute center of screen */}
         <div className="absolute left-1/2 -translate-x-1/2 -top-6 z-10">
           {appSettings?.logoUrl ? (

@@ -1,7 +1,7 @@
-import { BlogListPage } from "@/components/pages/BlogListPage";
+"use client";
 
-// Phase D: ISR — revalidate blog list every 10 minutes.
-export const revalidate = 600;
+import dynamic from "next/dynamic";
+const BlogListPage = dynamic(() => import("@/components/pages/BlogListPage").then(mod => mod.BlogListPage), { ssr: false });
 
 export default function Page() {
   return <BlogListPage />;

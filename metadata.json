@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "PPMH",
+  "description": "An application environment for importing, migrating, and optimizing GitHub repositories for AI Studio.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

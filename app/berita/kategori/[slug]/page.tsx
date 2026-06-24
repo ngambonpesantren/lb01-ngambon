@@ -1,10 +1,16 @@
-import { CategoryPage } from "@/components/pages/CategoryPage";
+"use client";
 
-// Phase D: ISR — revalidate category pages every 10 minutes.
-export const revalidate = 600;
+import dynamic from "next/dynamic";
+import { useParams } from "next/navigation";
 
-export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+const CategoryPage = dynamic(
+  () => import("@/components/pages/CategoryPage").then((m) => m.CategoryPage),
+  { ssr: false }
+);
+
+export default function Page() {
+  const params = useParams();
+  const slug = params?.slug as string;
   if (!slug) return null;
   return <CategoryPage slug={slug} />;
 }

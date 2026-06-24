@@ -1,7 +1,8 @@
 "use client";
 
 import { useAppDataQuery } from "@/hooks/useAppQueries";
-import { StudentProfilePage as StudentProfileComponent } from "@/components/pages/StudentProfilePage";
+import dynamic from "next/dynamic";
+const StudentProfileComponent = dynamic(() => import("@/components/pages/StudentProfilePage").then(mod => mod.StudentProfilePage), { ssr: false });
 import { useRouter, useParams } from "next/navigation";
 import { useCallback } from "react";
 import type { AssignedGoal } from "@/lib/types";

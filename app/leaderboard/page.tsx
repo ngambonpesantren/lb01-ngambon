@@ -1,7 +1,8 @@
 "use client";
 
 import { useAppDataQuery } from "@/hooks/useAppQueries";
-import { LeaderboardPage } from "@/components/pages/LeaderboardPage";
+import dynamic from "next/dynamic";
+const LeaderboardPage = dynamic(() => import("@/components/pages/LeaderboardPage").then(mod => mod.LeaderboardPage), { ssr: false });
 import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 import type { AssignedGoal } from "@/lib/types";

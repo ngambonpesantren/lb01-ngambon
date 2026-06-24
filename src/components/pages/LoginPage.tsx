@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { Loader2 } from "lucide-react";
-import { setLocalToken } from "@/lib/auth";
-import { loginAdmin } from "@/lib/auth-login";
+import { Settings, Loader2 } from "lucide-react";
+import { apiFetch, setLocalToken } from "../../lib/api";
+import { ImageFallback } from "../ImageFallback";
 
 export // --- LOGIN PAGE ---
 function LoginPage({
@@ -22,9 +22,14 @@ function LoginPage({
     setError("");
 
     try {
-      const result = await loginAdmin(email, password);
-      if (result.ok && result.token) {
-        setLocalToken(result.token);
+      const res = await apiFetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.token) setLocalToken(data.token);
         onLogin();
       } else {
         setError("Kata sandi salah. Silakan coba lagi.");
@@ -45,7 +50,7 @@ function LoginPage({
             {appSettings?.appName || "Login Admin"}
           </h1>
           <p className="text-muted-foreground mt-1">
-            Akses terbatas hanya untuk pendidik resmi.
+            Akses terbatas hanya untuk pengurus resmi.
           </p>
         </div>
 
