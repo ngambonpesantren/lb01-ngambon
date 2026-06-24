@@ -90,6 +90,11 @@ const FALLBACK_DUMMY_POSTS: Post[] = [
     status: "published",
     featured_image: "",
     published_at: "2026-06-15T02:00:00Z",
+    content: "",
+    author_id: "",
+    tags: [],
+    updated_at: "",
+    created_at: ""
   },
   {
     id: "dummy-4",
@@ -100,8 +105,13 @@ const FALLBACK_DUMMY_POSTS: Post[] = [
       "Mengembangkan kemandirian ekonomi pondok melalui rantai pasok sayuran hidroponik berbasis teknologi pencatatan presisi.",
     category: "Kemandirian",
     status: "published",
-    featured_image: null,
+    featured_image: "",
     published_at: "2026-06-10T09:00:00Z",
+    content: "",
+    author_id: "",
+    tags: [],
+    updated_at: "",
+    created_at: ""
   },
   {
     id: "dummy-5",
@@ -112,8 +122,13 @@ const FALLBACK_DUMMY_POSTS: Post[] = [
       "Analisis berkala ritme murajaah santri dalam menjaga akurasi setoran hafalan bil ghaib tanpa mengabaikan tugas akademik.",
     category: "Santri",
     status: "published",
-    featured_image: null,
+    featured_image: "",
     published_at: "2026-06-05T01:15:00Z",
+    content: "",
+    author_id: "",
+    tags: [],
+    updated_at: "",
+    created_at: ""
   },
   {
     id: "dummy-6",
@@ -124,8 +139,13 @@ const FALLBACK_DUMMY_POSTS: Post[] = [
       "Eksperimen tata ruang maktabah mini di sudut-sudut asrama guna merangsang minat mudzakarah kontemporer mandiri.",
     category: "Kompleks",
     status: "published",
-    featured_image: null,
+    featured_image: "",
     published_at: "2026-06-01T12:00:00Z",
+    content: "",
+    author_id: "",
+    tags: [],
+    updated_at: "",
+    created_at: ""
   },
 ];
 
@@ -588,6 +608,7 @@ function SmartSearchBar({
   onSortChange: (s: SortKey) => void;
   placeholder?: string;
   className?: string;
+  resultCount?: number;
 }) {
   const [showSort, setShowSort] = React.useState(false);
   const wrapRef = React.useRef<HTMLDivElement>(null);
